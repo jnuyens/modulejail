@@ -164,7 +164,19 @@ workdir=$(mktemp -d "${TMPDIR:-/tmp}/modulejail.XXXXXX") || {
     printf 'modulejail: cannot create temporary work directory\n' >&2
     exit 1
 }
-trap 'rm -rf "$workdir"' EXIT INT HUP TERM
+
+# Install the consolidated cleanup trap NOW (before the second mktemp in the
+# render block), so a signal arriving in the window between creating $tmp and
+# registering it does not orphan the in-target dotfile under /etc/modprobe.d/.
+# $tmp is initially empty; rm -f on an empty argument is a no-op, so the trap
+# is safe to fire before $tmp is assigned.
+tmp=
+# shellcheck disable=SC2329  # invoked via trap string, not direct call
+cleanup() {
+    rm -rf "$workdir"
+    [ -n "${tmp:-}" ] && rm -f "$tmp"
+}
+trap cleanup EXIT INT HUP TERM
 
 # list_universe: walk the FULL /lib/modules/$(uname -r) tree (NOT just kernel/)
 # so DKMS and weak-updates modules are included (RESEARCH §1 / pitfall §12).
@@ -257,21 +269,15 @@ fi
 # This guarantees readers see either the pre-run file or the post-run file, never a
 # partial write (RESEARCH §7 Pattern 2; D-11).
 
-# target_dir already computed above (writability gate); reuse it.
+# target_dir already computed above (writability gate); reuse it. The
+# consolidated cleanup trap was installed earlier (right after $workdir)
+# and already knows about $tmp (initially empty), so the post-mktemp
+# assignment is atomic from the trap's point of view — no signal window
+# can orphan this dotfile in $target_dir.
 tmp=$(mktemp "${target_dir}/.modulejail-blacklist.conf.XXXXXX") || {
     printf 'modulejail: cannot create temp file in %s\n' "$target_dir" >&2
     exit 1
 }
-
-# Extend the cleanup trap to also remove $tmp on any exit path (signal, failure,
-# or — harmlessly, since the file will be gone — success after mv).
-# We redefine cleanup() to cover both $workdir and $tmp, then re-register the trap.
-# shellcheck disable=SC2329  # invoked via trap string, not direct call
-cleanup() {
-    rm -rf "$workdir"
-    rm -f  "$tmp"
-}
-trap cleanup EXIT INT HUP TERM
 
 # Write 4-line header + one `install <mod> /bin/true` line per blacklisted module.
 # Header has NO version string and NO timestamp — those are Phase 2 / CORE-05.

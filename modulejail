@@ -156,7 +156,11 @@ fi
 
 # Per-invocation work directory — all intermediate sorted files live here.
 # Cleaned up on any exit path (success, failure, signal).
-workdir=$(mktemp -d -t modulejail.XXXXXX) || {
+# Use the explicit-template form rather than `mktemp -t modulejail.XXXXXX`:
+# the `-t` flag has three incompatible meanings across GNU coreutils, BSD,
+# and busybox (Alpine). The full-path template form works identically on
+# all of them and is self-documenting about where the directory lives.
+workdir=$(mktemp -d "${TMPDIR:-/tmp}/modulejail.XXXXXX") || {
     printf 'modulejail: cannot create temporary work directory\n' >&2
     exit 1
 }

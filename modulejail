@@ -121,6 +121,20 @@ if [ ! -d "/lib/modules/$(uname -r)" ]; then
     exit 1
 fi
 
+# --- Pre-flight: reject $output that is (or could become) a directory. ---
+# Without this, `-o /etc/modprobe.d` (or any existing directory — easy slip
+# with shell completion or a copy-paste from docs) would pass dirname, pass
+# the writability gate, and have `mv` quietly drop the temp file *inside*
+# the directory under its randomized name. modprobe ignores dotfiles, so
+# the host would silently end up unprotected. Catch both forms here.
+if [ -d "$output" ]; then
+    printf 'modulejail: -o %s is a directory; expected a file path\n' "$output" >&2
+    exit 1
+fi
+case "$output" in
+    */) printf 'modulejail: -o %s ends with /, expected a file path\n' "$output" >&2; exit 1 ;;
+esac
+
 # --- Pre-flight: writability gate (before any heavy work) ---
 target_dir=$(dirname "$output")
 if ! [ -w "$target_dir" ]; then

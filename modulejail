@@ -107,9 +107,59 @@ if ! [ -w "$target_dir" ]; then
     exit 1
 fi
 
-# === PIPELINE INSERTION POINT (Plan 02) ===
-# Plan 02 will replace this stub with the real enumerate/keep-list/
-# baseline/set-arithmetic/sanity-guard/render/atomic-write pipeline.
-# Do NOT edit the arg-parse or writability-gate code above this marker.
-printf 'modulejail: pipeline not yet implemented (Phase 1, Plan 02)\n' >&2
+# === PIPELINE (Plan 02 onward) ===
+# Pre-flight: verify this is a Linux host with the required kernel interfaces.
+if [ ! -e /proc/modules ]; then
+    printf 'modulejail: /proc/modules not found (is this a Linux host?)\n' >&2
+    exit 1
+fi
+if [ ! -d "/lib/modules/$(uname -r)" ]; then
+    printf 'modulejail: /lib/modules/%s does not exist (kernel module tree missing)\n' "$(uname -r)" >&2
+    exit 1
+fi
+
+# Per-invocation work directory — all intermediate sorted files live here.
+# Cleaned up on any exit path (success, failure, signal).
+workdir=$(mktemp -d -t modulejail.XXXXXX) || {
+    printf 'modulejail: cannot create temporary work directory\n' >&2
+    exit 1
+}
+trap 'rm -rf "$workdir"' EXIT INT HUP TERM
+
+# list_universe: walk the FULL /lib/modules/$(uname -r) tree (NOT just kernel/)
+# so DKMS and weak-updates modules are included (RESEARCH §1 / pitfall §12).
+# Strip exactly the four known suffixes (.ko, .ko.gz, .ko.xz, .ko.zst);
+# lines that do not match a known suffix are dropped (precision filter for
+# the *.ko* glob). Normalize - to _ (RESEARCH §2). Output is sorted, deduped.
+list_universe() {
+    find "/lib/modules/$(uname -r)" -type f -name '*.ko*' 2>/dev/null \
+    | awk '{
+        n = $0
+        # Keep only the basename
+        sub(/.*\//, "", n)
+        # Strip exactly one of the four known compression suffixes; drop others
+        if (!sub(/\.ko\.gz$/, "", n) && \
+            !sub(/\.ko\.xz$/, "", n) && \
+            !sub(/\.ko\.zst$/, "", n) && \
+            !sub(/\.ko$/, "", n)) next
+        # Normalize - to _ (canonical underscore form, RESEARCH §2)
+        gsub(/-/, "_", n)
+        print n
+    }' \
+    | sort -u
+}
+
+# list_loaded: read currently-loaded modules from /proc/modules (RESEARCH §3).
+# Uses /proc/modules directly — no kmod/lsmod runtime dep (Phase-2-PORT-02-friendly).
+# Column 1 of /proc/modules is already in canonical underscore form.
+list_loaded() {
+    awk '{print $1}' /proc/modules | sort -u
+}
+
+# Produce the two canonical input files for set arithmetic.
+list_universe > "$workdir/universe.txt"
+list_loaded   > "$workdir/loaded.txt"
+
+# === Task 2 insertion point: baseline expansion + set arithmetic + sanity guard ===
+printf 'modulejail: baseline/set-arithmetic not yet implemented (Plan 02, Task 2)\n' >&2
 exit 1

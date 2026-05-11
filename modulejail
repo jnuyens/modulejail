@@ -108,15 +108,10 @@ case "$profile" in
     *) printf 'modulejail: unknown profile: %s (expected minimal, conservative, desktop)\n' "$profile" >&2; exit 1 ;;
 esac
 
-# --- Pre-flight: writability gate (before any heavy work) ---
-target_dir=$(dirname "$output")
-if ! [ -w "$target_dir" ]; then
-    printf 'modulejail: cannot write to %s (try sudo, or use -o <other-path>)\n' "$target_dir" >&2
-    exit 1
-fi
-
-# === PIPELINE (Plan 02 onward) ===
-# Pre-flight: verify this is a Linux host with the required kernel interfaces.
+# --- Pre-flight: verify this is a Linux host with the required kernel ---
+# interfaces. Run this BEFORE the writability gate so non-Linux operators
+# (e.g. macOS) get an accurate "not a Linux host" diagnostic instead of a
+# misleading "cannot write to /etc/modprobe.d" message.
 if [ ! -e /proc/modules ]; then
     printf 'modulejail: /proc/modules not found (is this a Linux host?)\n' >&2
     exit 1
@@ -125,6 +120,15 @@ if [ ! -d "/lib/modules/$(uname -r)" ]; then
     printf 'modulejail: /lib/modules/%s does not exist (kernel module tree missing)\n' "$(uname -r)" >&2
     exit 1
 fi
+
+# --- Pre-flight: writability gate (before any heavy work) ---
+target_dir=$(dirname "$output")
+if ! [ -w "$target_dir" ]; then
+    printf 'modulejail: cannot write to %s (try sudo, or use -o <other-path>)\n' "$target_dir" >&2
+    exit 1
+fi
+
+# === PIPELINE (Plan 02 onward) ===
 
 # Per-invocation work directory — all intermediate sorted files live here.
 # Cleaned up on any exit path (success, failure, signal).

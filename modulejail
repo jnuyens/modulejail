@@ -4,6 +4,14 @@
 # See CLAUDE.md for project conventions. Pipeline added in Plan 02.
 set -eu
 
+# Force C locale for the whole pipeline. comm -23 requires its inputs to be
+# sorted byte-identically; under a non-C locale (e.g. en_US.UTF-8 or
+# tr_TR.UTF-8) sort uses locale-aware collation, which can silently desync
+# the universe/keep ordering and produce wrong set arithmetic. Also
+# stabilises awk regex matching.
+LC_ALL=C
+export LC_ALL
+
 # --- Defaults (set before arg parsing) ---
 profile=conservative
 output=/etc/modprobe.d/modulejail-blacklist.conf

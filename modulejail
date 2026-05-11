@@ -211,8 +211,44 @@ if [ "$((blacklist_count * 100))" -gt "$((universe_count * 99))" ]; then
     exit 1
 fi
 
-# === RENDER INSERTION POINT (Plan 03) ===
-# Plan 03 will render the blacklist set from $blacklist into install /bin/true lines
-# and write them atomically to $output. The $workdir and $blacklist variables are live.
-printf 'modulejail: renderer not yet implemented (Phase 1, Plan 03)\n' >&2
-exit 1
+# === RENDER (Plan 03) ===
+# Render $blacklist into install /bin/true directives and write atomically to $output.
+# Atomic write: mktemp in same dir as $output → chmod 0644 → mv (single rename(2)).
+# This guarantees readers see either the pre-run file or the post-run file, never a
+# partial write (RESEARCH §7 Pattern 2; D-11).
+
+# target_dir already computed above (writability gate); reuse it.
+tmp=$(mktemp "${target_dir}/.modulejail-blacklist.conf.XXXXXX") || {
+    printf 'modulejail: cannot create temp file in %s\n' "$target_dir" >&2
+    exit 1
+}
+
+# Extend the cleanup trap to also remove $tmp on any exit path (signal, failure,
+# or — harmlessly, since the file will be gone — success after mv).
+# We redefine cleanup() to cover both $workdir and $tmp, then re-register the trap.
+# shellcheck disable=SC2329  # invoked via trap string, not direct call
+cleanup() {
+    rm -rf "$workdir"
+    rm -f  "$tmp"
+}
+trap cleanup EXIT INT HUP TERM
+
+# Write 4-line header + one `install <mod> /bin/true` line per blacklisted module.
+# Header has NO version string and NO timestamp — those are Phase 2 / CORE-05.
+{
+    printf '# modulejail blacklist (Phase 1 minimum viable)\n'
+    printf '# Generated from /proc/modules + built-in baseline.\n'
+    printf '# Each line below intercepts modprobe and runs /bin/true.\n'
+    printf '# Do not edit by hand — see https://github.com/jnuyens/modulejail\n'
+    awk '{print "install " $1 " /bin/true"}' "$blacklist"
+} > "$tmp"
+
+# Set world-readable permissions before rename (umask may be too restrictive;
+# modprobe.d files must be readable by all — RESEARCH §7 rule 3).
+chmod 0644 "$tmp"
+
+# Atomic rename: single rename(2) syscall; same filesystem guaranteed because
+# $tmp is in $(dirname "$output") (RESEARCH §7 rule 1; D-11, D-12).
+mv -- "$tmp" "$output"
+
+exit 0

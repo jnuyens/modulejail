@@ -183,9 +183,26 @@ trap cleanup EXIT INT HUP TERM
 # Strip exactly the four known suffixes (.ko, .ko.gz, .ko.xz, .ko.zst);
 # lines that do not match a known suffix are dropped (precision filter for
 # the *.ko* glob). Normalize - to _ (RESEARCH §2). Output is sorted, deduped.
+#
+# POSIX /bin/sh has no `pipefail`, so a `find ... | awk ... | sort -u`
+# pipeline silently masks find failures (a permission-denied subtree under
+# weak-updates/, a broken symlink chain, transient I/O) and produces a
+# partial universe — which then under-blacklists the host and violates
+# CORE-04 invisibly. Capture find's stderr to a tempfile in $workdir, run
+# find with stdout to another tempfile, and abort if stderr is non-empty.
 list_universe() {
-    find "/lib/modules/$(uname -r)" -type f -name '*.ko*' 2>/dev/null \
-    | awk '{
+    find_out=$workdir/find.out
+    find_err=$workdir/find.err
+    find "/lib/modules/$(uname -r)" -type f -name '*.ko*' \
+        >"$find_out" 2>"$find_err"
+    if [ -s "$find_err" ]; then
+        printf 'modulejail: find reported errors walking /lib/modules/%s:\n' \
+            "$(uname -r)" >&2
+        cat "$find_err" >&2
+        printf 'modulejail: refusing to produce a partial blacklist.\n' >&2
+        exit 1
+    fi
+    awk '{
         n = $0
         # Keep only the basename
         sub(/.*\//, "", n)
@@ -197,8 +214,7 @@ list_universe() {
         # Normalize - to _ (canonical underscore form, RESEARCH §2)
         gsub(/-/, "_", n)
         print n
-    }' \
-    | sort -u
+    }' "$find_out" | sort -u
 }
 
 # list_loaded: read currently-loaded modules from /proc/modules (RESEARCH §3).

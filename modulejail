@@ -135,6 +135,16 @@ case "$output" in
     */) printf 'modulejail: -o %s ends with /, expected a file path\n' "$output" >&2; exit 1 ;;
 esac
 
+# --- Pre-flight: refuse a symlinked output target. ---
+# `mv -- "$tmp" "$output"` would follow the symlink and replace the *target*,
+# not the link. On a multi-tenant or misconfigured host this can write
+# outside /etc/modprobe.d/. Honour the atomic-rename safety story (D-11/D-12)
+# by refusing the symlink up front rather than silently following it.
+if [ -L "$output" ]; then
+    printf 'modulejail: refusing to overwrite symlink at %s\n' "$output" >&2
+    exit 1
+fi
+
 # --- Pre-flight: writability gate (before any heavy work) ---
 target_dir=$(dirname "$output")
 if ! [ -w "$target_dir" ]; then

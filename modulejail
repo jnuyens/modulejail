@@ -1,0 +1,114 @@
+#!/bin/sh
+# ModuleJail — shrink a Linux host's kernel-module attack surface.
+# Phase 1: CLI parsing, baseline profile definitions, writability gate.
+# See CLAUDE.md for project conventions. Pipeline added in Plan 02.
+set -eu
+
+# --- Defaults (set before arg parsing) ---
+profile=conservative
+output=/etc/modprobe.d/modulejail-blacklist.conf
+
+# --- Built-in baseline module lists (space-separated strings, not bash arrays) ---
+# Each profile inherits from the one above via variable interpolation (DRY).
+# Module names are in canonical underscore form; the pipeline normalizes both forms.
+
+# BASELINE_MINIMAL (16 entries):
+# Core filesystems, NLS deps for vfat/ESP, loop/overlay/autofs, crc32c/crc16.
+# Intent: "Won't break a box that's already booted" — safety net for hosts
+# where most drivers are compiled in but a few modular essentials remain.
+BASELINE_MINIMAL='ext4 xfs btrfs vfat fat nls_cp437 nls_iso8859_1 nls_utf8 tmpfs loop overlay autofs4 crc32c_generic crc32c_intel libcrc32c crc16'
+
+# BASELINE_CONSERVATIVE (MINIMAL + 39 entries ≈ 55 total):
+# Virtio/KVM, common storage controllers, common ethernet NICs, HID/input,
+# dm-crypt/LVM, and crypto primitives. Default profile (D-05).
+# Intent: "Bare-metal or VM Linux server across the mainstream hardware matrix."
+BASELINE_CONSERVATIVE="$BASELINE_MINIMAL virtio virtio_ring virtio_pci virtio_blk virtio_net virtio_scsi virtio_balloon virtio_rng nvme nvme_core ahci libahci libata sd_mod sr_mod scsi_mod usb_storage uas e1000 e1000e igb igc ixgbe r8169 tg3 bnxt_en bnx2 hid hid_generic usbhid i8042 dm_mod dm_crypt dm_mirror aes_generic aesni_intel sha256_generic xts cbc"
+
+# BASELINE_DESKTOP (CONSERVATIVE + ~50 entries ≈ 105 total):
+# Graphics/DRM, WiFi, Bluetooth, audio (ALSA/HDA), USB host controllers,
+# misc desktop peripherals, and webcam/video4linux.
+# Intent: "Laptop or workstation — won't break WiFi, BT, audio, or video."
+BASELINE_DESKTOP="$BASELINE_CONSERVATIVE drm drm_kms_helper i915 amdgpu radeon nouveau nvidia ttm video backlight cfg80211 mac80211 iwlwifi iwlmvm iwldvm ath9k ath10k_core ath10k_pci ath11k brcmfmac brcmsmac rtw88_core rtw89_core rtl8xxxu bluetooth btusb btintel btrtl btbcm hci_uart snd snd_pcm snd_timer snd_hda_intel snd_hda_codec snd_hda_codec_realtek snd_hda_codec_hdmi snd_hda_codec_generic snd_usb_audio snd_seq xhci_hcd xhci_pci ehci_hcd ehci_pci uhci_hcd usblp cdc_acm joydev evdev videodev uvcvideo media"
+
+# --- usage(): print help text; caller decides exit code ---
+usage() {
+    printf 'modulejail — shrink a Linux host'\''s kernel-module attack surface\n'
+    printf '\n'
+    printf 'Usage: modulejail [OPTIONS]\n'
+    printf '\n'
+    printf 'Options:\n'
+    printf '  -p, --profile {minimal|conservative|desktop}\n'
+    printf '                    Built-in baseline profile (default: conservative)\n'
+    printf '  -o, --output PATH Output path for the generated blacklist file\n'
+    printf '                    (default: /etc/modprobe.d/modulejail-blacklist.conf)\n'
+    printf '  -h, --help        Show this help text and exit\n'
+    printf '\n'
+    printf 'Profiles:\n'
+    printf '  minimal       Core filesystems + essential kernel modules only\n'
+    printf '  conservative  Minimal + common server/VM drivers (default)\n'
+    printf '  desktop       Conservative + WiFi, Bluetooth, audio, video drivers\n'
+    printf '\n'
+    printf 'Defaults:\n'
+    printf '  profile: conservative\n'
+    printf '  output:  /etc/modprobe.d/modulejail-blacklist.conf\n'
+}
+
+# --- Argument parser (manual case loop — POSIX, supports long options) ---
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -p|--profile)
+            [ $# -ge 2 ] || { printf 'modulejail: %s requires an argument\n' "$1" >&2; exit 1; }
+            profile=$2
+            shift 2
+            ;;
+        --profile=*)
+            profile=${1#--profile=}
+            shift
+            ;;
+        -o|--output)
+            [ $# -ge 2 ] || { printf 'modulejail: %s requires an argument\n' "$1" >&2; exit 1; }
+            output=$2
+            shift 2
+            ;;
+        --output=*)
+            output=${1#--output=}
+            shift
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        --)
+            shift
+            break
+            ;;
+        -*)
+            printf 'modulejail: unknown option: %s\n' "$1" >&2
+            exit 1
+            ;;
+        *)
+            printf 'modulejail: unexpected positional argument: %s\n' "$1" >&2
+            exit 1
+            ;;
+    esac
+done
+
+# --- Validate profile ---
+case "$profile" in
+    minimal|conservative|desktop) ;;
+    *) printf 'modulejail: unknown profile: %s (expected minimal, conservative, desktop)\n' "$profile" >&2; exit 1 ;;
+esac
+
+# --- Pre-flight: writability gate (before any heavy work) ---
+target_dir=$(dirname "$output")
+if ! [ -w "$target_dir" ]; then
+    printf 'modulejail: cannot write to %s (try sudo, or use -o <other-path>)\n' "$target_dir" >&2
+    exit 1
+fi
+
+# === PIPELINE INSERTION POINT (Plan 02) ===
+# Plan 02 will replace this stub with the real enumerate/keep-list/
+# baseline/set-arithmetic/sanity-guard/render/atomic-write pipeline.
+# Do NOT edit the arg-parse or writability-gate code above this marker.
+printf 'modulejail: pipeline not yet implemented (Phase 1, Plan 02)\n' >&2
+exit 1

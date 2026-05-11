@@ -160,6 +160,59 @@ list_loaded() {
 list_universe > "$workdir/universe.txt"
 list_loaded   > "$workdir/loaded.txt"
 
-# === Task 2 insertion point: baseline expansion + set arithmetic + sanity guard ===
-printf 'modulejail: baseline/set-arithmetic not yet implemented (Plan 02, Task 2)\n' >&2
+# list_baseline: expand the selected baseline profile ($profile) into a sorted,
+# deduplicated list of canonical underscore module names.
+# BASELINE_* variables are POSIX space-separated strings (NOT bash arrays — RESEARCH §8
+# anti-pattern). We expand them via intentional word-splitting.
+list_baseline() {
+    case "$profile" in
+        minimal)      list=$BASELINE_MINIMAL ;;
+        conservative) list=$BASELINE_CONSERVATIVE ;;
+        desktop)      list=$BASELINE_DESKTOP ;;
+    esac
+    # intentional word-splitting — BASELINE_* are POSIX space-separated lists, not bash arrays
+    # shellcheck disable=SC2086
+    for x in $list; do
+        printf '%s\n' "$x"
+    done \
+    | tr '-' '_' \
+    | sort -u
+}
+
+list_baseline > "$workdir/baseline.txt"
+
+# Compose total keep-list: loaded modules union baseline (sorted, deduped).
+cat "$workdir/loaded.txt" "$workdir/baseline.txt" | sort -u > "$workdir/keep.txt"
+
+# Set difference: blacklist = universe − keep (RESEARCH Pattern 1).
+# comm -23 requires both inputs to be sorted; both universe.txt and keep.txt are.
+comm -23 "$workdir/universe.txt" "$workdir/keep.txt" > "$workdir/blacklist.txt"
+
+# Expose result path for Plan 03's renderer.
+# shellcheck disable=SC2034  # used by Plan 03 renderer
+blacklist="$workdir/blacklist.txt"
+
+# Sanity guard (RESEARCH §11): abort on degenerate output to avoid
+# bricking a host with an empty or near-total blacklist.
+universe_count=$(wc -l < "$workdir/universe.txt")
+blacklist_count=$(wc -l < "$workdir/blacklist.txt")
+
+if [ "$blacklist_count" -eq 0 ]; then
+    printf 'modulejail: computed blacklist is empty; nothing to write.\n' >&2
+    printf 'modulejail: check that /proc/modules is readable and the baseline list is correct.\n' >&2
+    exit 1
+fi
+
+if [ "$((blacklist_count * 100))" -gt "$((universe_count * 99))" ]; then
+    printf 'modulejail: computed blacklist covers %d of %d modules (>99%% of universe).\n' \
+        "$blacklist_count" "$universe_count" >&2
+    printf 'modulejail: This usually means /proc/modules was unreadable or the baseline list is wrong.\n' >&2
+    printf 'modulejail: Aborting to avoid an unbootable host.\n' >&2
+    exit 1
+fi
+
+# === RENDER INSERTION POINT (Plan 03) ===
+# Plan 03 will render the blacklist set from $blacklist into install /bin/true lines
+# and write them atomically to $output. The $workdir and $blacklist variables are live.
+printf 'modulejail: renderer not yet implemented (Phase 1, Plan 03)\n' >&2
 exit 1

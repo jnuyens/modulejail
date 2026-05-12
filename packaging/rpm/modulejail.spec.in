@@ -45,6 +45,15 @@ install -Dm644 modulejail.8 %{buildroot}%{_mandir}/man8/modulejail.8
 
 %changelog
 * Wed May 13 2026 Jasper Nuyens <jnuyens@linuxbe.com> - __VERSION__-1
+- Update check now works on Alpine / busybox wget. The wget invocation
+  used GNU long-form flags (--quiet, --max-redirect=5,
+  --output-document=-) that busybox wget rejects, causing the check to
+  silently exit non-zero on every Alpine host. Switched to the
+  universal short-flag subset (-q, -T 10, -O -) and dropped
+  --max-redirect (the GitHub tags API does not redirect). No other
+  changes.
+
+* Wed May 13 2026 Jasper Nuyens <jnuyens@linuxbe.com> - 1.1.2-1
 - Adds modulejail(8) manpage; ships at /usr/share/man/man8/modulejail.8.gz.
 
 * Tue May 12 2026 Jasper Nuyens <jnuyens@linuxbe.com> - 1.1.1-1

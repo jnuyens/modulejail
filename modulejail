@@ -15,7 +15,7 @@ export LC_ALL
 # --- Tool version + sysexits.h exit code constants ---
 # VERSION is the single source of truth for both --version and the
 # generated blacklist header. Bump on every release per SemVer.
-VERSION='1.1.2'
+VERSION='1.1.3'
 EX_OK=0
 # sysexits.h conventional codes (see man 3 sysexits):
 #   64=usage 66=noinput 70=software 71=oserr 73=cantcreat 77=noperm
@@ -472,11 +472,14 @@ check_for_updates() {
         # --max-time 10: hard wall-clock cap.
         body=$(curl -fsL --max-time 10 "$update_url" 2>/dev/null) || return 0
     elif command -v wget >/dev/null 2>&1; then
-        body=$(wget --quiet \
-                    --max-redirect=5 \
-                    --timeout=10 \
-                    --output-document=- \
-                    "$update_url" 2>/dev/null) || return 0
+        # Use the universal short-flag subset accepted by both GNU wget
+        # and busybox wget (Alpine ships only the latter). busybox wget
+        # rejects --max-redirect / --output-document / --quiet long forms
+        # and exits non-zero, which previously made the update check
+        # silently fail on Alpine. The GitHub tags API serves directly
+        # at api.github.com without redirecting, so -L / --max-redirect
+        # are not needed.
+        body=$(wget -q -T 10 -O - "$update_url" 2>/dev/null) || return 0
     else
         return 0
     fi

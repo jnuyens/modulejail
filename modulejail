@@ -17,7 +17,14 @@ export LC_ALL
 # generated blacklist header. Bump on every release per SemVer.
 VERSION='1.0.0'
 EX_OK=0
-# (additional EX_* codes added in Plan 02 sysexits refactor)
+# sysexits.h conventional codes (see man 3 sysexits, RESEARCH §1):
+#   64=usage 66=noinput 70=software 71=oserr 73=cantcreat 77=noperm
+EX_USAGE=64
+EX_NOINPUT=66
+EX_SOFTWARE=70
+EX_OSERR=71
+EX_CANTCREAT=73
+EX_NOPERM=77
 
 # --- Defaults (set before arg parsing) ---
 profile=conservative
@@ -89,7 +96,7 @@ usage() {
 while [ $# -gt 0 ]; do
     case "$1" in
         -p|--profile)
-            [ $# -ge 2 ] || { printf 'modulejail: %s requires an argument\n' "$1" >&2; exit 1; }
+            [ $# -ge 2 ] || { printf 'modulejail: error: %s requires an argument\n' "$1" >&2; exit $EX_USAGE; }
             profile=$2
             shift 2
             ;;
@@ -98,7 +105,7 @@ while [ $# -gt 0 ]; do
             shift
             ;;
         -o|--output)
-            [ $# -ge 2 ] || { printf 'modulejail: %s requires an argument\n' "$1" >&2; exit 1; }
+            [ $# -ge 2 ] || { printf 'modulejail: error: %s requires an argument\n' "$1" >&2; exit $EX_USAGE; }
             output=$2
             shift 2
             ;;
@@ -121,12 +128,12 @@ while [ $# -gt 0 ]; do
             break
             ;;
         -*)
-            printf 'modulejail: unknown option: %s\n' "$1" >&2
-            exit 1
+            printf 'modulejail: error: unknown option: %s\n' "$1" >&2
+            exit $EX_USAGE
             ;;
         *)
-            printf 'modulejail: unexpected positional argument: %s\n' "$1" >&2
-            exit 1
+            printf 'modulejail: error: unexpected positional argument: %s\n' "$1" >&2
+            exit $EX_USAGE
             ;;
     esac
 done
@@ -134,7 +141,7 @@ done
 # --- Validate profile ---
 case "$profile" in
     minimal|conservative|desktop) ;;
-    *) printf 'modulejail: unknown profile: %s (expected minimal, conservative, desktop)\n' "$profile" >&2; exit 1 ;;
+    *) printf 'modulejail: error: unknown profile: %s (expected minimal, conservative, desktop)\n' "$profile" >&2; exit $EX_USAGE ;;
 esac
 
 # --- Pre-flight: verify this is a Linux host with the required kernel ---
@@ -142,12 +149,12 @@ esac
 # (e.g. macOS) get an accurate "not a Linux host" diagnostic instead of a
 # misleading "cannot write to /etc/modprobe.d" message.
 if [ ! -e /proc/modules ]; then
-    printf 'modulejail: /proc/modules not found (is this a Linux host?)\n' >&2
-    exit 1
+    printf 'modulejail: error: /proc/modules not found (is this a Linux host?)\n' >&2
+    exit $EX_NOINPUT
 fi
 if [ ! -d "/lib/modules/$(uname -r)" ]; then
-    printf 'modulejail: /lib/modules/%s does not exist (kernel module tree missing)\n' "$(uname -r)" >&2
-    exit 1
+    printf 'modulejail: error: /lib/modules/%s does not exist (kernel module tree missing)\n' "$(uname -r)" >&2
+    exit $EX_NOINPUT
 fi
 
 # --- Pre-flight: reject $output that is (or could become) a directory. ---
@@ -157,11 +164,11 @@ fi
 # the directory under its randomized name. modprobe ignores dotfiles, so
 # the host would silently end up unprotected. Catch both forms here.
 if [ -d "$output" ]; then
-    printf 'modulejail: -o %s is a directory; expected a file path\n' "$output" >&2
-    exit 1
+    printf 'modulejail: error: -o %s is a directory; expected a file path\n' "$output" >&2
+    exit $EX_CANTCREAT
 fi
 case "$output" in
-    */) printf 'modulejail: -o %s ends with /, expected a file path\n' "$output" >&2; exit 1 ;;
+    */) printf 'modulejail: error: -o %s ends with /, expected a file path\n' "$output" >&2; exit $EX_CANTCREAT ;;
 esac
 
 # --- Pre-flight: refuse a symlinked output target. ---
@@ -170,15 +177,15 @@ esac
 # outside /etc/modprobe.d/. Honour the atomic-rename safety story (D-11/D-12)
 # by refusing the symlink up front rather than silently following it.
 if [ -L "$output" ]; then
-    printf 'modulejail: refusing to overwrite symlink at %s\n' "$output" >&2
-    exit 1
+    printf 'modulejail: error: refusing to overwrite symlink at %s\n' "$output" >&2
+    exit $EX_CANTCREAT
 fi
 
 # --- Pre-flight: writability gate (before any heavy work) ---
 target_dir=$(dirname "$output")
 if ! [ -w "$target_dir" ]; then
-    printf 'modulejail: cannot write to %s (try sudo, or use -o <other-path>)\n' "$target_dir" >&2
-    exit 1
+    printf 'modulejail: error: cannot write to %s (try sudo, or use -o <other-path>)\n' "$target_dir" >&2
+    exit $EX_NOPERM
 fi
 
 # === PIPELINE (Plan 02 onward) ===
@@ -190,8 +197,8 @@ fi
 # and busybox (Alpine). The full-path template form works identically on
 # all of them and is self-documenting about where the directory lives.
 workdir=$(mktemp -d "${TMPDIR:-/tmp}/modulejail.XXXXXX") || {
-    printf 'modulejail: cannot create temporary work directory\n' >&2
-    exit 1
+    printf 'modulejail: error: cannot create temporary work directory\n' >&2
+    exit $EX_OSERR
 }
 
 # Install the consolidated cleanup trap NOW (before the second mktemp in the
@@ -225,11 +232,11 @@ list_universe() {
     find "/lib/modules/$(uname -r)" -type f -name '*.ko*' \
         >"$find_out" 2>"$find_err"
     if [ -s "$find_err" ]; then
-        printf 'modulejail: find reported errors walking /lib/modules/%s:\n' \
+        printf 'modulejail: error: find reported errors walking /lib/modules/%s:\n' \
             "$(uname -r)" >&2
         cat "$find_err" >&2
-        printf 'modulejail: refusing to produce a partial blacklist.\n' >&2
-        exit 1
+        printf 'modulejail: error: refusing to produce a partial blacklist.\n' >&2
+        exit $EX_OSERR
     fi
     awk '{
         n = $0
@@ -308,17 +315,17 @@ universe_count=$(wc -l < "$workdir/universe.txt")
 blacklist_count=$(wc -l < "$workdir/blacklist.txt")
 
 if [ "$blacklist_count" -eq 0 ]; then
-    printf 'modulejail: computed blacklist is empty; nothing to write.\n' >&2
-    printf 'modulejail: check that /proc/modules is readable and the baseline list is correct.\n' >&2
-    exit 1
+    printf 'modulejail: error: computed blacklist is empty; nothing to write.\n' >&2
+    printf 'modulejail: error: check that /proc/modules is readable and the baseline list is correct.\n' >&2
+    exit $EX_SOFTWARE
 fi
 
 if [ "$((blacklist_count * 100))" -gt "$((universe_count * 99))" ]; then
-    printf 'modulejail: computed blacklist covers %d of %d modules (>99%% of universe).\n' \
+    printf 'modulejail: error: computed blacklist covers %d of %d modules (>99%% of universe).\n' \
         "$blacklist_count" "$universe_count" >&2
-    printf 'modulejail: This usually means /proc/modules was unreadable or the baseline list is wrong.\n' >&2
-    printf 'modulejail: Aborting to avoid an unbootable host.\n' >&2
-    exit 1
+    printf 'modulejail: error: This usually means /proc/modules was unreadable or the baseline list is wrong.\n' >&2
+    printf 'modulejail: error: Aborting to avoid an unbootable host.\n' >&2
+    exit $EX_SOFTWARE
 fi
 
 # === FINGERPRINT (Plan 02-01) ===
@@ -353,8 +360,8 @@ fingerprint=$(sha256sum < "$workdir/fingerprint.input" | awk '{print $1}')
 # assignment is atomic from the trap's point of view — no signal window
 # can orphan this dotfile in $target_dir.
 tmp=$(mktemp "${target_dir}/.modulejail-blacklist.conf.XXXXXX") || {
-    printf 'modulejail: cannot create temp file in %s\n' "$target_dir" >&2
-    exit 1
+    printf 'modulejail: error: cannot create temp file in %s\n' "$target_dir" >&2
+    exit $EX_CANTCREAT
 }
 
 # Write 6-line header + one `install <mod> /bin/true` line per blacklisted module.

@@ -6,86 +6,6 @@ currently in use, minus a built-in baseline and an optional sysadmin
 whitelist. No daemons, no initramfs changes, no AI inside the tool. One
 script, one run, one blacklist file.
 
-## What ModuleJail is
-
-ModuleJail snapshots the set of currently loaded modules (`/proc/modules`) and
-computes the complement against the full module tree
-(`/lib/modules/$(uname -r)`). Every module in the complement, minus a built-in
-baseline of essential modules and an optional sysadmin-supplied whitelist, is
-emitted as an `install <mod> /bin/true` directive in a `modprobe.d`-compatible
-blacklist file.
-
-The tool is aimed at Linux fleet operators who need to harden many servers
-against the wave of AI-assisted kernel privilege-escalation discoveries. Every
-additional loaded module is additional latent attack surface for the next
-disclosed CVE. ModuleJail's model is simple: if it is not loaded today on a
-steady-state host, blacklist it.
-
-The script is portable across Debian/Ubuntu, RHEL/Rocky, Arch, Alpine, and
-SUSE families. It has no runtime dependencies beyond `awk`, `comm`, `find`,
-`sha256sum`, and standard coreutils, all present in every base Linux install
-including busybox.
-
-## Quickstart
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.1.0/modulejail | sudo sh
-```
-
-> **WARNING: convenient, not safe.** This pipes unverified bytes from the
-> network to a root shell. The safer alternative below is the recommended path.
-
-The script writes its blacklist to `/etc/modprobe.d/modulejail-blacklist.conf`
-by default. To use a different path:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.1.0/modulejail | sudo sh -s -- -o /etc/modprobe.d/site-blacklist.conf
-```
-
-## The safer alternative
-
-Download, inspect, then run:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.1.0/modulejail -o /tmp/modulejail
-less /tmp/modulejail
-sudo sh /tmp/modulejail
-```
-
-This is the recommended path for any production deployment. The script is
-plain POSIX shell and inspection takes under ten minutes.
-
-## Native packages (.deb / .rpm)
-
-For Debian/Ubuntu and RHEL/Fedora/Rocky hosts, prebuilt packages are attached
-to the GitHub release page:
-
-```sh
-# Debian / Ubuntu:
-curl -fsSLO https://github.com/jnuyens/modulejail/releases/download/v1.1.0/modulejail_1.1.0_all.deb
-sudo dpkg -i modulejail_1.1.0_all.deb
-
-# RHEL / Fedora / Rocky:
-curl -fsSLO https://github.com/jnuyens/modulejail/releases/download/v1.1.0/modulejail-1.1.0-1.noarch.rpm
-sudo rpm -i modulejail-1.1.0-1.noarch.rpm
-```
-
-Both packages install `/usr/bin/modulejail`, the README, and the LICENSE under
-`/usr/share/doc/modulejail/`. They depend on `coreutils`, `findutils`, and
-`awk`/`gawk` (all standard) and recommend `curl` or `wget` so the optional
-post-run update check can reach GitHub.
-
-To rebuild the packages locally from a checkout:
-
-```sh
-./packaging/build.sh           # builds whatever this host's tooling supports
-./packaging/build.sh --deb     # .deb only (requires dpkg-deb)
-./packaging/build.sh --rpm     # .rpm only (requires rpmbuild)
-```
-
-Output goes to `packaging/dist/`. The script skips gracefully on hosts
-without the matching tooling.
-
 ## Why?
 
 AI-assisted security scanning is about to do to the Linux kernel what
@@ -109,8 +29,89 @@ emergency-paging at 03:00.
 
 This is intentionally a boring tool. No AI inside it, no daemon, no
 continuous monitoring, no risk scoring, no CVE database lookups. Just one
-shell script, run once on a steady-state host, that writes one `modprobe.d`
+shell script, run once on a steady-state host, that writes
+`/etc/modprobe.d/modulejail-blacklist.conf` to blacklist the thousands of
+unused modules, specific to your system.
+
+## Quickstart
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.1.1/modulejail | sudo sh
+```
+
+> **WARNING: convenient, not safe.** This pipes unverified bytes from the
+> network to a root shell. The safer alternative below is the recommended path.
+
+The script writes its blacklist to `/etc/modprobe.d/modulejail-blacklist.conf`
+by default. To use a different path:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.1.1/modulejail | sudo sh -s -- -o /etc/modprobe.d/site-blacklist.conf
+```
+
+## The safer alternative
+
+Download, inspect, then run:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.1.1/modulejail -o /tmp/modulejail
+less /tmp/modulejail
+sudo sh /tmp/modulejail
+```
+
+This is the recommended path for any production deployment. The script is
+plain POSIX shell and inspection takes under ten minutes.
+
+## Native packages (.deb / .rpm)
+
+For Debian/Ubuntu and RHEL/Fedora/Rocky hosts, prebuilt packages are attached
+to the GitHub release page:
+
+```sh
+# Debian / Ubuntu:
+curl -fsSLO https://github.com/jnuyens/modulejail/releases/download/v1.1.1/modulejail_1.1.1_all.deb
+sudo dpkg -i modulejail_1.1.1_all.deb
+
+# RHEL / Fedora / Rocky:
+curl -fsSLO https://github.com/jnuyens/modulejail/releases/download/v1.1.1/modulejail-1.1.1-1.noarch.rpm
+sudo rpm -i modulejail-1.1.1-1.noarch.rpm
+```
+
+Both packages install `/usr/bin/modulejail`, the README, and the LICENSE under
+`/usr/share/doc/modulejail/`. They depend on `coreutils`, `findutils`, and
+`awk`/`gawk` (all standard) and recommend `curl` or `wget` so the optional
+post-run update check can reach GitHub.
+
+To rebuild the packages locally from a checkout:
+
+```sh
+./packaging/build.sh           # builds whatever this host's tooling supports
+./packaging/build.sh --deb     # .deb only (requires dpkg-deb)
+./packaging/build.sh --rpm     # .rpm only (requires rpmbuild)
+```
+
+Output goes to `packaging/dist/`. The script skips gracefully on hosts
+without the matching tooling.
+
+## What ModuleJail is
+
+ModuleJail snapshots the set of currently loaded modules (`/proc/modules`) and
+computes the complement against the full module tree
+(`/lib/modules/$(uname -r)`). Every module in the complement, minus a built-in
+baseline of essential modules and an optional sysadmin-supplied whitelist, is
+emitted as an `install <mod> /bin/true` directive in a `modprobe.d`-compatible
 blacklist file.
+
+The tool is aimed at Linux fleet operators who need to harden many servers
+against the wave of AI-assisted kernel privilege-escalation discoveries. Every
+additional loaded module is additional latent attack surface for the next
+disclosed CVE. ModuleJail's model is simple: if it is not loaded today on a
+steady-state host, blacklist it.
+
+The script is portable across Debian/Ubuntu, RHEL/Rocky, Arch, Alpine, and
+SUSE families. It has no runtime dependencies beyond `awk`, `comm`, `find`,
+`sha256sum`, and standard coreutils, all present in every base Linux install
+including busybox.
 
 ## The safety model
 

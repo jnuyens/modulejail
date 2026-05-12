@@ -43,6 +43,14 @@ install -Dm644 LICENSE    %{buildroot}%{_docdir}/%{name}/LICENSE
 
 %changelog
 * Tue May 12 2026 Jasper Nuyens <jnuyens@linuxbe.com> - __VERSION__-1
+- Documentation: swap the order of "Why?" and "What ModuleJail is" in
+  the README so the motivation leads.
+- Packaging: drop the per-distro %dist suffix from the RPM filename
+  (was modulejail-X.Y.Z-1.el9.noarch.rpm, now
+  modulejail-X.Y.Z-1.noarch.rpm). ModuleJail is a noarch shell script
+  with no per-major-RHEL semantics.
+
+* Tue May 12 2026 Jasper Nuyens <jnuyens@linuxbe.com> - 1.1.0-1
 - Adds .deb and .rpm packaging.
 - Adds optional post-run check for a newer release on GitHub: silent on
   any failure, 10-second hard timeout, only complains when reachable

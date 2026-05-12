@@ -90,7 +90,14 @@ build_rpm() {
 
     sed "s/__VERSION__/$VERSION/g" packaging/rpm/modulejail.spec.in > "$work/SPECS/modulejail.spec"
 
-    rpmbuild --define "_topdir $work" -bb "$work/SPECS/modulejail.spec" >/dev/null
+    # Suppress the per-distro %dist tag so the resulting RPM filename is
+    # the same regardless of which RHEL/Fedora major was used to build it
+    # (modulejail-X.Y.Z-1.noarch.rpm, not modulejail-X.Y.Z-1.el9.noarch.rpm).
+    # ModuleJail is a noarch shell script; the dist origin carries no
+    # technical meaning here.
+    rpmbuild --define "_topdir $work" \
+             --define "dist %{nil}" \
+             -bb "$work/SPECS/modulejail.spec" >/dev/null
 
     # Copy built RPMs to dist/.
     find "$work/RPMS" -name '*.rpm' -type f | while read -r rpm; do

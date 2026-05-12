@@ -2,8 +2,6 @@
   <img src="modulejail.png" alt="ModuleJail: lock down unused kernel modules. Reduce risk. Stay secure." width="480">
 </p>
 
-# ModuleJail
-
 A single POSIX shell script that shrinks a Linux host's kernel-module attack
 surface by writing a `modprobe.d` blacklist for every kernel module not
 currently in use, minus a built-in baseline and an optional sysadmin

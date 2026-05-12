@@ -278,7 +278,6 @@ list_baseline() {
 
 # list_whitelist: expand $WHITELIST into a sorted, deduplicated list of
 # canonical underscore module names. Parallel to list_baseline above.
-# shellcheck disable=SC2329  # invoked by Task 2 pipeline integration
 list_whitelist() {
     # intentional word-splitting — WHITELIST is a POSIX space-separated list, not bash array
     # shellcheck disable=SC2086
@@ -290,9 +289,10 @@ list_whitelist() {
 }
 
 list_baseline > "$workdir/baseline.txt"
+list_whitelist > "$workdir/whitelist.txt"
 
-# Compose total keep-list: loaded modules union baseline (sorted, deduped).
-cat "$workdir/loaded.txt" "$workdir/baseline.txt" | sort -u > "$workdir/keep.txt"
+# Compose total keep-list: loaded modules union baseline union whitelist (sorted, deduped).
+cat "$workdir/loaded.txt" "$workdir/baseline.txt" "$workdir/whitelist.txt" | sort -u > "$workdir/keep.txt"
 
 # Set difference: blacklist = universe − keep (RESEARCH Pattern 1).
 # comm -23 requires both inputs to be sorted; both universe.txt and keep.txt are.
@@ -321,6 +321,26 @@ if [ "$((blacklist_count * 100))" -gt "$((universe_count * 99))" ]; then
     exit 1
 fi
 
+# === FINGERPRINT (Plan 02-01) ===
+# Hash a canonical serialization of (sorted loaded, sorted baseline,
+# sorted whitelist, profile, kernel) so two runs with byte-identical
+# inputs produce byte-identical headers. NO wall-clock anywhere —
+# OPS-01 / D-23 (RESEARCH §Pattern 1, §Pitfall 1).
+# Use plain `sha256sum` (no flags) — busybox lacks `--tag`
+# (§Pitfall 2; CITED idris-lang/Idris2#1935).
+{
+    printf 'modulejail-fingerprint:v1\n'
+    printf 'profile:%s\n' "$profile"
+    printf 'kernel:%s\n' "$(uname -r)"
+    printf 'loaded:\n'
+    cat "$workdir/loaded.txt"
+    printf 'baseline:\n'
+    cat "$workdir/baseline.txt"
+    printf 'whitelist:\n'
+    cat "$workdir/whitelist.txt"
+} > "$workdir/fingerprint.input"
+fingerprint=$(sha256sum < "$workdir/fingerprint.input" | awk '{print $1}')
+
 # === RENDER (Plan 03) ===
 # Render $blacklist into install /bin/true directives and write atomically to $output.
 # Atomic write: mktemp in same dir as $output → chmod 0644 → mv (single rename(2)).
@@ -337,13 +357,17 @@ tmp=$(mktemp "${target_dir}/.modulejail-blacklist.conf.XXXXXX") || {
     exit 1
 }
 
-# Write 4-line header + one `install <mod> /bin/true` line per blacklisted module.
-# Header has NO version string and NO timestamp — those are Phase 2 / CORE-05.
+# Write 6-line header + one `install <mod> /bin/true` line per blacklisted module.
+# Header contains tool version + repo URL + profile + kernel + sha256 fingerprint +
+# edit-by-hand disclaimer. NO wall-clock — header is a deterministic function of
+# inputs (OPS-01 / D-22/D-23). Fingerprint is computed above the render block.
 {
-    printf '# modulejail blacklist (Phase 1 minimum viable)\n'
-    printf '# Generated from /proc/modules + built-in baseline.\n'
-    printf '# Each line below intercepts modprobe and runs /bin/true.\n'
-    printf '# Do not edit by hand — see https://github.com/jnuyens/modulejail\n'
+    printf '# modulejail %s\n' "$VERSION"
+    printf '# https://github.com/jnuyens/modulejail\n'
+    printf '# profile: %s\n' "$profile"
+    printf '# kernel: %s\n' "$(uname -r)"
+    printf '# fingerprint: sha256:%s\n' "$fingerprint"
+    printf '# Do not edit by hand — regenerate with modulejail(8).\n'
     awk '{print "install " $1 " /bin/true"}' "$blacklist"
 } > "$tmp"
 

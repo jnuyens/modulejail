@@ -12,13 +12,22 @@ sh /tests/lib/gen-fixture.sh
 
 export MODULEJAIL_PROC_MODULES=/tmp/proc-modules
 export MODULEJAIL_KVER=6.99.0-fixture
+# Suppress the post-run update check by default so steady-state fixture
+# runs are hermetic (no network calls). Specific update-check assertions
+# below toggle this variable explicitly.
+export MODULEJAIL_NO_UPDATE_CHECK=1
+
+# Version-agnostic SemVer regex. The v1.0.0 fixture hardcoded the literal
+# string "1.0.0", which broke every fixture run after the first version
+# bump. This pattern matches any X.Y.Z, future-proofing across bumps.
+SEMVER_RE='[0-9]+\.[0-9]+\.[0-9]+'
 
 printf '== [%s] (1) shellcheck --shell=sh modulejail ==\n' "$DISTRO"
 shellcheck --shell=sh /usr/local/bin/modulejail
 
-printf '== [%s] (2) --version exits 0 ==\n' "$DISTRO"
+printf '== [%s] (2) --version exits 0 with valid SemVer ==\n' "$DISTRO"
 out=$(/usr/local/bin/modulejail --version)
-echo "$out" | head -1 | grep -qx 'modulejail 1.0.0'
+echo "$out" | head -1 | grep -qE "^modulejail $SEMVER_RE$"
 
 printf '== [%s] (3) --help exits 0 ==\n' "$DISTRO"
 /usr/local/bin/modulejail --help > /dev/null
@@ -56,8 +65,43 @@ printf '== [%s] (9) PORT-01: no per-distro branches in modulejail ==\n' "$DISTRO
 # Assert grep finds zero per-distro branch patterns (exits 1 = no match = pass).
 grep -qE '/etc/os-release|/etc/lsb-release|/etc/redhat-release|/etc/debian_version|ID_LIKE|ID=ubuntu|ID=debian|ID=rhel|ID=fedora|ID=arch|ID=alpine|ID=opensuse' /usr/local/bin/modulejail && { printf 'FAIL [%s]: per-distro branch found in modulejail\n' "$DISTRO" >&2; exit 1; } || true
 
-printf '== [%s] (10) Header shape ==\n' "$DISTRO"
-head -6 /tmp/fixture-run1.conf | sed -n '1p' | grep -qx '# modulejail 1.0.0'
+printf '== [%s] (10) Header shape (version-agnostic) ==\n' "$DISTRO"
+head -6 /tmp/fixture-run1.conf | sed -n '1p' | grep -qE "^# modulejail $SEMVER_RE$"
 head -6 /tmp/fixture-run1.conf | sed -n '5p' | grep -qE '^# fingerprint: sha256:[0-9a-f]{64}$'
 
-printf '[%s] FIXTURE PASS\n' "$DISTRO"
+printf '== [%s] (11) --help documents MODULEJAIL_NO_UPDATE_CHECK ==\n' "$DISTRO"
+/usr/local/bin/modulejail --help | grep -q 'MODULEJAIL_NO_UPDATE_CHECK'
+
+printf '== [%s] (12) update check: NO_UPDATE_CHECK=1 -> no stderr notice ==\n' "$DISTRO"
+# Capture stderr separately; success line is on stdout, notices on stderr.
+err=$(MODULEJAIL_NO_UPDATE_CHECK=1 /usr/local/bin/modulejail -o /tmp/fixture-noup.conf 2>&1 >/dev/null)
+case "$err" in
+    *"notice:"*) printf 'FAIL [%s]: NO_UPDATE_CHECK=1 still produced notice on stderr\n' "$DISTRO" >&2; exit 1 ;;
+esac
+
+printf '== [%s] (13) update check: unreachable URL -> silent (graceful failure) ==\n' "$DISTRO"
+# Unset the suppressor and point at an unroutable URL. The 10-second
+# timeout caps the wait; the function must still return 0 with no notice.
+err=$(unset MODULEJAIL_NO_UPDATE_CHECK; \
+      MODULEJAIL_UPDATE_URL=https://bogus.invalid.example.com/x \
+      /usr/local/bin/modulejail -o /tmp/fixture-unreach.conf 2>&1 >/dev/null)
+case "$err" in
+    *"notice:"*) printf 'FAIL [%s]: unreachable URL produced notice on stderr\n' "$DISTRO" >&2; exit 1 ;;
+esac
+
+printf '== [%s] (14) regression guard: wget call uses busybox-compatible flags ==\n' "$DISTRO"
+# Static source check. busybox wget (Alpine) rejects --max-redirect,
+# --output-document, and --quiet long forms. v1.1.2 used these and the
+# update check was a silent no-op on every Alpine host. v1.1.3 switched
+# to the short-flag subset (-q -T -O). If a future edit reintroduces a
+# long form, this assertion catches it without needing network.
+wget_line=$(grep -E '^[[:space:]]*body=\$\(wget' /usr/local/bin/modulejail || true)
+[ -n "$wget_line" ] || { printf 'FAIL [%s]: could not find wget invocation in script\n' "$DISTRO" >&2; exit 1; }
+case "$wget_line" in
+    *--max-redirect*|*--output-document*|*--quiet*)
+        printf 'FAIL [%s]: wget invocation uses busybox-incompatible long flags:\n  %s\n' "$DISTRO" "$wget_line" >&2
+        exit 1
+        ;;
+esac
+
+printf '[%s] FIXTURE PASS (14/14 assertions)\n' "$DISTRO"

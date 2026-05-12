@@ -45,6 +45,13 @@ install -Dm644 modulejail.8 %{buildroot}%{_mandir}/man8/modulejail.8
 
 %changelog
 * Wed May 13 2026 Jasper Nuyens <jnuyens@linuxbe.com> - __VERSION__-1
+- Add project logo to README.
+- Test infra: update container fixture to be version-agnostic (was
+  hardcoded to 1.0.0 strings) and add four new assertions covering the
+  v1.1.x update-check surface, including a static regression guard
+  against the v1.1.2 busybox-wget bug.
+
+* Wed May 13 2026 Jasper Nuyens <jnuyens@linuxbe.com> - 1.1.3-1
 - Update check now works on Alpine / busybox wget. The wget invocation
   used GNU long-form flags (--quiet, --max-redirect=5,
   --output-document=-) that busybox wget rejects, causing the check to

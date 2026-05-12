@@ -157,8 +157,13 @@ esac
 # interfaces. Run this BEFORE the writability gate so non-Linux operators
 # (e.g. macOS) get an accurate "not a Linux host" diagnostic instead of a
 # misleading "cannot write to /etc/modprobe.d" message.
-if [ ! -e /proc/modules ]; then
-    printf 'modulejail: error: /proc/modules not found (is this a Linux host?)\n' >&2
+# /proc/modules path is overridable via MODULEJAIL_PROC_MODULES for
+# test fixtures that cannot expose a synthetic /proc (test-only
+# plumbing — cf. TMPDIR, GIT_DIR; RESEARCH §6 / A2). End-user
+# operators leave it unset.
+if [ ! -e "${MODULEJAIL_PROC_MODULES:-/proc/modules}" ]; then
+    printf 'modulejail: error: %s not found (is this a Linux host?)\n' \
+        "${MODULEJAIL_PROC_MODULES:-/proc/modules}" >&2
     exit $EX_NOINPUT
 fi
 if [ ! -d "/lib/modules/$(uname -r)" ]; then
@@ -266,7 +271,9 @@ list_universe() {
 # Uses /proc/modules directly — no kmod/lsmod runtime dep (Phase-2-PORT-02-friendly).
 # Column 1 of /proc/modules is already in canonical underscore form.
 list_loaded() {
-    awk '{print $1}' /proc/modules | sort -u
+    # /proc/modules path overridable via MODULEJAIL_PROC_MODULES
+    # (test-only plumbing; see pre-flight gate above).
+    awk '{print $1}' "${MODULEJAIL_PROC_MODULES:-/proc/modules}" | sort -u
 }
 
 # Produce the two canonical input files for set arithmetic.

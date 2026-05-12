@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-only
 # ModuleJail — shrink a Linux host's kernel-module attack surface.
 # Phase 1: CLI parsing, baseline profile definitions, writability gate.
 # See CLAUDE.md for project conventions. Pipeline added in Plan 02.

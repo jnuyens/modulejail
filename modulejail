@@ -90,6 +90,15 @@ usage() {
     printf 'Defaults:\n'
     printf '  profile: conservative\n'
     printf '  output:  /etc/modprobe.d/modulejail-blacklist.conf\n'
+    printf '\n'
+    printf 'Exit codes:\n'
+    printf '  0   success\n'
+    printf '  64  command-line argument error (bad flag, missing value, unknown profile)\n'
+    printf '  66  required kernel input missing (/proc/modules or /lib/modules/<kernel>)\n'
+    printf '  70  sanity guard tripped (empty blacklist or >99%% of modules blacklisted)\n'
+    printf '  71  OS-level error (mktemp work dir, or find errors on /lib/modules)\n'
+    printf '  73  output path cannot be created (symlink/directory/trailing-slash, or mktemp failure)\n'
+    printf '  77  target directory not writable (try sudo, or use -o <other-path>)\n'
 }
 
 # --- Argument parser (manual case loop — POSIX, supports long options) ---
@@ -115,7 +124,7 @@ while [ $# -gt 0 ]; do
             ;;
         -h|--help)
             usage
-            exit 0
+            exit $EX_OK
             ;;
         -V|--version)
             printf 'modulejail %s\n' "$VERSION"
@@ -386,4 +395,11 @@ chmod 0644 "$tmp"
 # $tmp is in $(dirname "$output") (RESEARCH §7 rule 1; D-11, D-12).
 mv -- "$tmp" "$output"
 
-exit 0
+# Single-line success summary on stdout per OPS-03 / D-30.
+# Parseable by `awk -F'[ ()=:>-]+'` for fleet log aggregators;
+# quiet enough not to spam Ansible/Puppet output. No --quiet/
+# --verbose toggle in v1 — this single line is already minimal.
+printf 'modulejail: blacklisted %d of %d modules (profile=%s) -> %s\n' \
+    "$blacklist_count" "$universe_count" "$profile" "$output"
+
+exit $EX_OK

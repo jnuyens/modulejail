@@ -1,8 +1,7 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-3.0-only
-# ModuleJail — shrink a Linux host's kernel-module attack surface.
-# Phase 1: CLI parsing, baseline profile definitions, writability gate.
-# See CLAUDE.md for project conventions. Pipeline added in Plan 02.
+# Copyright (C) 2026 Jasper Nuyens <jnuyens@linuxbe.com>
+# ModuleJail: shrink a Linux host's kernel-module attack surface.
 set -eu
 
 # Force C locale for the whole pipeline. comm -23 requires its inputs to be
@@ -16,9 +15,9 @@ export LC_ALL
 # --- Tool version + sysexits.h exit code constants ---
 # VERSION is the single source of truth for both --version and the
 # generated blacklist header. Bump on every release per SemVer.
-VERSION='1.0.0'
+VERSION='1.0.1'
 EX_OK=0
-# sysexits.h conventional codes (see man 3 sysexits, RESEARCH §1):
+# sysexits.h conventional codes (see man 3 sysexits):
 #   64=usage 66=noinput 70=software 71=oserr 73=cantcreat 77=noperm
 EX_USAGE=64
 EX_NOINPUT=66
@@ -43,7 +42,7 @@ BASELINE_MINIMAL='ext4 xfs btrfs vfat fat nls_cp437 nls_iso8859_1 nls_utf8 tmpfs
 
 # BASELINE_CONSERVATIVE (MINIMAL + 39 entries ≈ 55 total):
 # Virtio/KVM, common storage controllers, common ethernet NICs, HID/input,
-# dm-crypt/LVM, and crypto primitives. Default profile (D-05).
+# dm-crypt/LVM, and crypto primitives. Default profile.
 # Intent: "Bare-metal or VM Linux server across the mainstream hardware matrix."
 BASELINE_CONSERVATIVE="$BASELINE_MINIMAL virtio virtio_ring virtio_pci virtio_blk virtio_net virtio_scsi virtio_balloon virtio_rng nvme nvme_core ahci libahci libata sd_mod sr_mod scsi_mod usb_storage uas e1000 e1000e igb igc ixgbe r8169 tg3 bnxt_en bnx2 hid hid_generic usbhid i8042 dm_mod dm_crypt dm_mirror aes_generic aesni_intel sha256_generic xts cbc"
 
@@ -51,7 +50,7 @@ BASELINE_CONSERVATIVE="$BASELINE_MINIMAL virtio virtio_ring virtio_pci virtio_bl
 # Graphics/DRM, WiFi, Bluetooth, audio (ALSA/HDA), USB host controllers,
 # misc desktop peripherals, and webcam/video4linux.
 # Intent: "Laptop or workstation — won't break WiFi, BT, audio, or video."
-# shellcheck disable=SC2034  # used by Plan 02 pipeline
+# shellcheck disable=SC2034  # referenced indirectly via the profile case statement
 BASELINE_DESKTOP="$BASELINE_CONSERVATIVE drm drm_kms_helper i915 amdgpu radeon nouveau nvidia ttm video backlight cfg80211 mac80211 iwlwifi iwlmvm iwldvm ath9k ath10k_core ath10k_pci ath11k brcmfmac brcmsmac rtw88_core rtw89_core rtl8xxxu bluetooth btusb btintel btrtl btbcm hci_uart snd snd_pcm snd_timer snd_hda_intel snd_hda_codec snd_hda_codec_realtek snd_hda_codec_hdmi snd_hda_codec_generic snd_usb_audio snd_seq xhci_hcd xhci_pci ehci_hcd ehci_pci uhci_hcd usblp cdc_acm joydev evdev videodev uvcvideo media"
 
 # === SYSADMIN WHITELIST ===
@@ -156,12 +155,11 @@ esac
 
 # --- Pre-flight: verify this is a Linux host with the required kernel ---
 # interfaces. Run this BEFORE the writability gate so non-Linux operators
-# (e.g. macOS) get an accurate "not a Linux host" diagnostic instead of a
-# misleading "cannot write to /etc/modprobe.d" message.
+# get an accurate "not a Linux host" diagnostic instead of a misleading
+# "cannot write to /etc/modprobe.d" message.
 # /proc/modules path is overridable via MODULEJAIL_PROC_MODULES for
-# test fixtures that cannot expose a synthetic /proc (test-only
-# plumbing — cf. TMPDIR, GIT_DIR; RESEARCH §6 / A2). End-user
-# operators leave it unset.
+# test fixtures that cannot expose a synthetic /proc (test-only plumbing,
+# cf. TMPDIR, GIT_DIR). End-user operators leave it unset.
 if [ ! -e "${MODULEJAIL_PROC_MODULES:-/proc/modules}" ]; then
     printf 'modulejail: error: %s not found (is this a Linux host?)\n' \
         "${MODULEJAIL_PROC_MODULES:-/proc/modules}" >&2
@@ -193,8 +191,8 @@ esac
 # --- Pre-flight: refuse a symlinked output target. ---
 # `mv -- "$tmp" "$output"` would follow the symlink and replace the *target*,
 # not the link. On a multi-tenant or misconfigured host this can write
-# outside /etc/modprobe.d/. Honour the atomic-rename safety story (D-11/D-12)
-# by refusing the symlink up front rather than silently following it.
+# outside /etc/modprobe.d/. Honour the atomic-rename safety story by
+# refusing the symlink up front rather than silently following it.
 if [ -L "$output" ]; then
     printf 'modulejail: error: refusing to overwrite symlink at %s\n' "$output" >&2
     exit $EX_CANTCREAT
@@ -207,7 +205,7 @@ if ! [ -w "$target_dir" ]; then
     exit $EX_NOPERM
 fi
 
-# === PIPELINE (Plan 02 onward) ===
+# === PIPELINE ===
 
 # Per-invocation work directory — all intermediate sorted files live here.
 # Cleaned up on any exit path (success, failure, signal).
@@ -236,17 +234,17 @@ cleanup() {
 trap cleanup EXIT INT HUP TERM
 
 # list_universe: walk the FULL /lib/modules/$(uname -r) tree (NOT just kernel/)
-# so DKMS and weak-updates modules are included (RESEARCH §1 / pitfall §12).
+# so DKMS and weak-updates modules are included.
 # Strip exactly the four known suffixes (.ko, .ko.gz, .ko.xz, .ko.zst);
 # lines that do not match a known suffix are dropped (precision filter for
-# the *.ko* glob). Normalize - to _ (RESEARCH §2). Output is sorted, deduped.
+# the *.ko* glob). Normalize - to _. Output is sorted, deduped.
 #
 # POSIX /bin/sh has no `pipefail`, so a `find ... | awk ... | sort -u`
 # pipeline silently masks find failures (a permission-denied subtree under
 # weak-updates/, a broken symlink chain, transient I/O) and produces a
-# partial universe — which then under-blacklists the host and violates
-# CORE-04 invisibly. Capture find's stderr to a tempfile in $workdir, run
-# find with stdout to another tempfile, and abort if stderr is non-empty.
+# partial universe, which then under-blacklists the host invisibly.
+# Capture find's stderr to a tempfile in $workdir, run find with stdout
+# to another tempfile, and abort if stderr is non-empty.
 list_universe() {
     find_out=$workdir/find.out
     find_err=$workdir/find.err
@@ -268,14 +266,14 @@ list_universe() {
             !sub(/\.ko\.xz$/, "", n) && \
             !sub(/\.ko\.zst$/, "", n) && \
             !sub(/\.ko$/, "", n)) next
-        # Normalize - to _ (canonical underscore form, RESEARCH §2)
+        # Normalize - to _ (canonical underscore form)
         gsub(/-/, "_", n)
         print n
     }' "$find_out" | sort -u
 }
 
-# list_loaded: read currently-loaded modules from /proc/modules (RESEARCH §3).
-# Uses /proc/modules directly — no kmod/lsmod runtime dep (Phase-2-PORT-02-friendly).
+# list_loaded: read currently-loaded modules from /proc/modules.
+# Uses /proc/modules directly — no kmod/lsmod runtime dep.
 # Column 1 of /proc/modules is already in canonical underscore form.
 list_loaded() {
     # /proc/modules path overridable via MODULEJAIL_PROC_MODULES
@@ -289,8 +287,8 @@ list_loaded   > "$workdir/loaded.txt"
 
 # list_baseline: expand the selected baseline profile ($profile) into a sorted,
 # deduplicated list of canonical underscore module names.
-# BASELINE_* variables are POSIX space-separated strings (NOT bash arrays — RESEARCH §8
-# anti-pattern). We expand them via intentional word-splitting.
+# BASELINE_* variables are POSIX space-separated strings (NOT bash arrays).
+# We expand them via intentional word-splitting.
 list_baseline() {
     case "$profile" in
         minimal)      list=$BASELINE_MINIMAL ;;
@@ -324,16 +322,16 @@ list_whitelist > "$workdir/whitelist.txt"
 # Compose total keep-list: loaded modules union baseline union whitelist (sorted, deduped).
 cat "$workdir/loaded.txt" "$workdir/baseline.txt" "$workdir/whitelist.txt" | sort -u > "$workdir/keep.txt"
 
-# Set difference: blacklist = universe − keep (RESEARCH Pattern 1).
+# Set difference: blacklist = universe − keep.
 # comm -23 requires both inputs to be sorted; both universe.txt and keep.txt are.
 comm -23 "$workdir/universe.txt" "$workdir/keep.txt" > "$workdir/blacklist.txt"
 
-# Expose result path for Plan 03's renderer.
-# shellcheck disable=SC2034  # used by Plan 03 renderer
+# Expose result path for the renderer below.
+# shellcheck disable=SC2034  # consumed by the render block via $blacklist
 blacklist="$workdir/blacklist.txt"
 
-# Sanity guard (RESEARCH §11): abort on degenerate output to avoid
-# bricking a host with an empty or near-total blacklist.
+# Sanity guard: abort on degenerate output to avoid bricking a host with
+# an empty or near-total blacklist.
 universe_count=$(wc -l < "$workdir/universe.txt")
 blacklist_count=$(wc -l < "$workdir/blacklist.txt")
 
@@ -351,13 +349,13 @@ if [ "$((blacklist_count * 100))" -gt "$((universe_count * 99))" ]; then
     exit $EX_SOFTWARE
 fi
 
-# === FINGERPRINT (Plan 02-01) ===
+# === FINGERPRINT ===
 # Hash a canonical serialization of (sorted loaded, sorted baseline,
 # sorted whitelist, profile, kernel) so two runs with byte-identical
-# inputs produce byte-identical headers. NO wall-clock anywhere —
-# OPS-01 / D-23 (RESEARCH §Pattern 1, §Pitfall 1).
-# Use plain `sha256sum` (no flags) — busybox lacks `--tag`
-# (§Pitfall 2; CITED idris-lang/Idris2#1935).
+# inputs produce byte-identical headers. NO wall-clock anywhere: the
+# header is a deterministic function of inputs, so idempotency is by
+# construction.
+# Use plain `sha256sum` (no flags); busybox lacks `--tag`.
 {
     printf 'modulejail-fingerprint:v1\n'
     printf 'profile:%s\n' "$profile"
@@ -371,11 +369,11 @@ fi
 } > "$workdir/fingerprint.input"
 fingerprint=$(sha256sum < "$workdir/fingerprint.input" | awk '{print $1}')
 
-# === RENDER (Plan 03) ===
+# === RENDER ===
 # Render $blacklist into install /bin/true directives and write atomically to $output.
 # Atomic write: mktemp in same dir as $output → chmod 0644 → mv (single rename(2)).
 # This guarantees readers see either the pre-run file or the post-run file, never a
-# partial write (RESEARCH §7 Pattern 2; D-11).
+# partial write.
 
 # target_dir already computed above (writability gate); reuse it. The
 # consolidated cleanup trap was installed earlier (right after $workdir)
@@ -389,8 +387,8 @@ tmp=$(mktemp "${target_dir}/.modulejail-blacklist.conf.XXXXXX") || {
 
 # Write 6-line header + one `install <mod> /bin/true` line per blacklisted module.
 # Header contains tool version + repo URL + profile + kernel + sha256 fingerprint +
-# edit-by-hand disclaimer. NO wall-clock — header is a deterministic function of
-# inputs (OPS-01 / D-22/D-23). Fingerprint is computed above the render block.
+# edit-by-hand disclaimer. NO wall-clock; header is a deterministic function of
+# inputs. Fingerprint is computed above the render block.
 {
     printf '# modulejail %s\n' "$VERSION"
     printf '# https://github.com/jnuyens/modulejail\n'
@@ -402,17 +400,17 @@ tmp=$(mktemp "${target_dir}/.modulejail-blacklist.conf.XXXXXX") || {
 } > "$tmp"
 
 # Set world-readable permissions before rename (umask may be too restrictive;
-# modprobe.d files must be readable by all — RESEARCH §7 rule 3).
+# modprobe.d files must be readable by all).
 chmod 0644 "$tmp"
 
 # Atomic rename: single rename(2) syscall; same filesystem guaranteed because
-# $tmp is in $(dirname "$output") (RESEARCH §7 rule 1; D-11, D-12).
+# $tmp is in $(dirname "$output").
 mv -- "$tmp" "$output"
 
-# Single-line success summary on stdout per OPS-03 / D-30.
+# Single-line success summary on stdout.
 # Parseable by `awk -F'[ ()=:>-]+'` for fleet log aggregators;
 # quiet enough not to spam Ansible/Puppet output. No --quiet/
-# --verbose toggle in v1 — this single line is already minimal.
+# --verbose toggle in v1: this single line is already minimal.
 printf 'modulejail: blacklisted %d of %d modules (profile=%s) -> %s\n' \
     "$blacklist_count" "$universe_count" "$profile" "$output"
 

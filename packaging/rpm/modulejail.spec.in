@@ -31,18 +31,23 @@ blacklist file.
 %setup -q
 
 %install
-install -Dm755 modulejail %{buildroot}%{_bindir}/modulejail
-install -Dm644 README.md  %{buildroot}%{_docdir}/%{name}/README.md
-install -Dm644 LICENSE    %{buildroot}%{_docdir}/%{name}/LICENSE
+install -Dm755 modulejail   %{buildroot}%{_bindir}/modulejail
+install -Dm644 README.md    %{buildroot}%{_docdir}/%{name}/README.md
+install -Dm644 LICENSE      %{buildroot}%{_docdir}/%{name}/LICENSE
+install -Dm644 modulejail.8 %{buildroot}%{_mandir}/man8/modulejail.8
 
 %files
 %{_bindir}/modulejail
 %dir %{_docdir}/%{name}
 %doc %{_docdir}/%{name}/README.md
 %license %{_docdir}/%{name}/LICENSE
+%{_mandir}/man8/modulejail.8*
 
 %changelog
-* Tue May 12 2026 Jasper Nuyens <jnuyens@linuxbe.com> - __VERSION__-1
+* Wed May 13 2026 Jasper Nuyens <jnuyens@linuxbe.com> - __VERSION__-1
+- Adds modulejail(8) manpage; ships at /usr/share/man/man8/modulejail.8.gz.
+
+* Tue May 12 2026 Jasper Nuyens <jnuyens@linuxbe.com> - 1.1.1-1
 - Documentation: swap the order of "Why?" and "What ModuleJail is" in
   the README so the motivation leads.
 - Packaging: drop the per-distro %dist suffix from the RPM filename

@@ -1,0 +1,272 @@
+.\" Manpage for modulejail.
+.\" Source: man/modulejail.8.in (templated; build.sh substitutes __VERSION__).
+.\" View installed: man 8 modulejail
+.TH MODULEJAIL 8 "2026-05-13" "modulejail __VERSION__" "System Administration"
+
+.SH NAME
+modulejail \- shrink a Linux host's kernel-module attack surface
+
+.SH SYNOPSIS
+.B modulejail
+.RB [ \-p
+.IR profile ]
+.RB [ \-o
+.IR output ]
+.br
+.B modulejail
+.RB { \-h | \-\-help | \-V | \-\-version }
+
+.SH DESCRIPTION
+.B modulejail
+shrinks the kernel-module attack surface of a Linux host by writing a
+.BR modprobe.d (5)
+blacklist file that disables every kernel module not currently in use.
+.PP
+On invocation, the script snapshots the set of currently loaded modules
+from
+.I /proc/modules
+and computes the complement against the full module tree under
+.IR /lib/modules/$(uname\ -r) .
+Every module in the complement, minus a built-in baseline of essential
+modules and an optional sysadmin-supplied whitelist, is emitted as an
+.B install
+.I mod
+.B /bin/true
+directive in
+.I /etc/modprobe.d/modulejail-blacklist.conf
+(or the path passed to
+.BR \-o ).
+.PP
+The script is a POSIX-friendly
+.B /bin/sh
+program with no runtime dependencies beyond
+.BR awk ,
+.BR comm ,
+.BR find ,
+.BR sha256sum ,
+and standard coreutils. It is aimed at Linux fleet operators who need to
+harden many servers against the wave of AI-assisted kernel
+privilege-escalation discoveries: every additional loaded module is
+additional latent attack surface for the next disclosed CVE.
+
+.SH OPTIONS
+.TP
+.BR \-p ", " \-\-profile " " {minimal|conservative|desktop}
+Select the built-in baseline profile of always-preserved modules
+(default:
+.BR conservative ).
+See
+.B PROFILES
+below.
+.TP
+.BR \-o ", " \-\-output " " \fIpath\fR
+Write the generated blacklist to
+.IR path
+(default:
+.IR /etc/modprobe.d/modulejail-blacklist.conf ).
+The target directory must be writable; non-root invocations are
+supported when the chosen path lies outside
+.IR /etc/modprobe.d/ .
+.TP
+.BR \-V ", " \-\-version
+Print version, repository URL, and license, then exit
+.BR 0 .
+.TP
+.BR \-h ", " \-\-help
+Print a usage summary including exit codes and environment, then exit
+.BR 0 .
+
+.SH PROFILES
+.TP
+.B minimal
+Core filesystems plus essential kernel modules only.
+.TP
+.B conservative
+Minimal plus common server and VM drivers. The default; appropriate for
+virtualised or bare-metal Linux servers across the mainstream hardware
+matrix.
+.TP
+.B desktop
+Conservative plus WiFi, Bluetooth, audio, and video drivers. For
+laptops and workstations.
+
+.SH SYSADMIN WHITELIST
+A site-local
+.B WHITELIST
+variable near the top of the script holds space-separated module names
+that are always preserved, beyond the selected baseline. It ships empty.
+Edit the script in place and look for the
+.B "=== SYSADMIN WHITELIST ==="
+banner. The
+.B ===
+anchors are designed for Ansible template insertion
+.RB ( lineinfile " or " blockinfile ).
+
+.SH SAFETY MODEL
+The invariant is: whatever is currently loaded is assumed necessary for
+the host to function, and is preserved.
+.B modulejail
+does not guess; it reads
+.I /proc/modules
+at run time and treats that exact set as the keep-list. The operator's
+responsibility is to run
+.B modulejail
+when the host is in a known-good, steady-state configuration: after all
+services are started, all kernel drivers loaded, all filesystems
+mounted. Running it on a partial or in-flux system risks blacklisting a
+module that is occasionally needed.
+.PP
+The built-in baseline ensures that core filesystems, storage
+controllers, and essential networking modules are never blacklisted
+regardless of the running profile.
+
+.SH IDEMPOTENCY
+Two consecutive runs on an unchanged host produce byte-identical output
+files. The generated blacklist header carries a
+.B sha256
+fingerprint over canonical inputs (sorted loaded-module set, sorted
+baseline, sorted whitelist, profile name, and kernel version) rather
+than a wall-clock timestamp. Identical inputs therefore produce an
+identical fingerprint, and an identical output file. Fleet operators
+can use the fingerprint to correlate hardening state across machines:
+two hosts with the same fingerprint had identical loaded sets,
+baseline, whitelist, profile, and kernel version when
+.B modulejail
+ran.
+
+.SH EXIT CODES
+Exit codes follow
+.BR sysexits (3)
+conventions.
+.TP
+.B 0
+Success.
+.TP
+.B 64
+Command-line argument error: bad flag, missing value, or unknown
+profile.
+.TP
+.B 66
+Required kernel input missing
+.RI ( /proc/modules
+or
+.IR /lib/modules/<kernel> ).
+.TP
+.B 70
+Sanity guard tripped: the computed blacklist is empty, or covers more
+than 99% of the module universe. Aborting to avoid an unbootable host.
+.TP
+.B 71
+OS-level error: cannot create the temporary work directory, or
+.B find
+reported errors walking
+.IR /lib/modules .
+.TP
+.B 73
+Output path cannot be created: symlinked target, existing directory,
+trailing slash, or
+.B mktemp
+failure in the target directory.
+.TP
+.B 77
+Target directory not writable. Try
+.BR sudo ,
+or use
+.B \-o
+.IR other-path .
+
+.SH ENVIRONMENT
+.TP
+.B MODULEJAIL_NO_UPDATE_CHECK
+Set to any non-empty value to skip the post-run check for a newer
+release on GitHub. The check has a 10-second hard timeout and is silent
+on every failure mode; this variable disables it entirely for offline
+fleets, restricted networks, or pipeline-style automation where any
+unexpected output is noise.
+
+.SH FILES
+.TP
+.I /etc/modprobe.d/modulejail-blacklist.conf
+Default output path. Overridable with
+.BR \-o .
+.TP
+.I /proc/modules
+Read at run time as the keep-list.
+.TP
+.IR /lib/modules/$(uname\ -r)
+Walked to enumerate the full module universe (including DKMS and
+weak-updates modules).
+
+.SH EXAMPLES
+Hardening a server with the default profile and default output path:
+.PP
+.RS
+.EX
+sudo modulejail
+.EE
+.RE
+.PP
+Workstation hardening, preserving WiFi, Bluetooth, audio, and video
+drivers:
+.PP
+.RS
+.EX
+sudo modulejail \-p desktop
+.EE
+.RE
+.PP
+Writing to a custom path (does not require root if the directory is
+writable):
+.PP
+.RS
+.EX
+modulejail \-o /tmp/site-blacklist.conf
+.EE
+.RE
+.PP
+Fleet-automation context: disable the update check to keep output
+deterministic.
+.PP
+.RS
+.EX
+MODULEJAIL_NO_UPDATE_CHECK=1 sudo modulejail
+.EE
+.RE
+
+.SH REVERTING
+Remove the generated file and reboot:
+.PP
+.RS
+.EX
+sudo rm /etc/modprobe.d/modulejail-blacklist.conf
+sudo reboot
+.EE
+.RE
+.PP
+To bring back a specific module without rebooting (the restriction
+re-applies after the next reboot unless the file has been removed):
+.PP
+.RS
+.EX
+sudo modprobe <module_name>
+.EE
+.RE
+
+.SH SEE ALSO
+.BR modprobe (8),
+.BR modprobe.d (5),
+.BR sysexits (3),
+.BR lsmod (8)
+
+.SH AUTHOR
+Jasper Nuyens <jnuyens@linuxbe.com>
+
+.SH COPYRIGHT
+Copyright \(co 2026 Jasper Nuyens.
+License GPL-3.0-only.
+.PP
+This is free software: you are free to change and redistribute it. There
+is NO WARRANTY, to the extent permitted by law.
+
+.SH HOMEPAGE
+https://github.com/jnuyens/modulejail

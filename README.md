@@ -36,7 +36,7 @@ unused modules, specific to your system.
 ## Quickstart
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.1.1/modulejail | sudo sh
+curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.1.2/modulejail | sudo sh
 ```
 
 > **WARNING: convenient, not safe.** This pipes unverified bytes from the
@@ -46,7 +46,7 @@ The script writes its blacklist to `/etc/modprobe.d/modulejail-blacklist.conf`
 by default. To use a different path:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.1.1/modulejail | sudo sh -s -- -o /etc/modprobe.d/site-blacklist.conf
+curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.1.2/modulejail | sudo sh -s -- -o /etc/modprobe.d/site-blacklist.conf
 ```
 
 ## The safer alternative
@@ -54,7 +54,7 @@ curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.1.1/modulejai
 Download, inspect, then run:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.1.1/modulejail -o /tmp/modulejail
+curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.1.2/modulejail -o /tmp/modulejail
 less /tmp/modulejail
 sudo sh /tmp/modulejail
 ```
@@ -69,18 +69,22 @@ to the GitHub release page:
 
 ```sh
 # Debian / Ubuntu:
-curl -fsSLO https://github.com/jnuyens/modulejail/releases/download/v1.1.1/modulejail_1.1.1_all.deb
-sudo dpkg -i modulejail_1.1.1_all.deb
+curl -fsSLO https://github.com/jnuyens/modulejail/releases/download/v1.1.2/modulejail_1.1.2_all.deb
+sudo dpkg -i modulejail_1.1.2_all.deb
 
 # RHEL / Fedora / Rocky:
-curl -fsSLO https://github.com/jnuyens/modulejail/releases/download/v1.1.1/modulejail-1.1.1-1.noarch.rpm
-sudo rpm -i modulejail-1.1.1-1.noarch.rpm
+curl -fsSLO https://github.com/jnuyens/modulejail/releases/download/v1.1.2/modulejail-1.1.2-1.noarch.rpm
+sudo rpm -i modulejail-1.1.2-1.noarch.rpm
 ```
 
-Both packages install `/usr/bin/modulejail`, the README, and the LICENSE under
+Both packages install `/usr/bin/modulejail`, the `modulejail(8)` manpage
+under `/usr/share/man/man8/`, and the README and LICENSE under
 `/usr/share/doc/modulejail/`. They depend on `coreutils`, `findutils`, and
 `awk`/`gawk` (all standard) and recommend `curl` or `wget` so the optional
 post-run update check can reach GitHub.
+
+After install, `man 8 modulejail` shows the full reference: options,
+profiles, safety model, idempotency, exit codes, environment, and examples.
 
 To rebuild the packages locally from a checkout:
 

@@ -29,7 +29,7 @@ including busybox.
 ## Quickstart
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.0.1/modulejail | sudo sh
+curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.1.0/modulejail | sudo sh
 ```
 
 > **WARNING: convenient, not safe.** This pipes unverified bytes from the
@@ -39,7 +39,7 @@ The script writes its blacklist to `/etc/modprobe.d/modulejail-blacklist.conf`
 by default. To use a different path:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.0.1/modulejail | sudo sh -s -- -o /etc/modprobe.d/site-blacklist.conf
+curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.1.0/modulejail | sudo sh -s -- -o /etc/modprobe.d/site-blacklist.conf
 ```
 
 ## The safer alternative
@@ -47,13 +47,44 @@ curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.0.1/modulejai
 Download, inspect, then run:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.0.1/modulejail -o /tmp/modulejail
+curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.1.0/modulejail -o /tmp/modulejail
 less /tmp/modulejail
 sudo sh /tmp/modulejail
 ```
 
 This is the recommended path for any production deployment. The script is
 plain POSIX shell and inspection takes under ten minutes.
+
+## Native packages (.deb / .rpm)
+
+For Debian/Ubuntu and RHEL/Fedora/Rocky hosts, prebuilt packages are attached
+to the GitHub release page:
+
+```sh
+# Debian / Ubuntu:
+curl -fsSLO https://github.com/jnuyens/modulejail/releases/download/v1.1.0/modulejail_1.1.0_all.deb
+sudo dpkg -i modulejail_1.1.0_all.deb
+
+# RHEL / Fedora / Rocky:
+curl -fsSLO https://github.com/jnuyens/modulejail/releases/download/v1.1.0/modulejail-1.1.0-1.noarch.rpm
+sudo rpm -i modulejail-1.1.0-1.noarch.rpm
+```
+
+Both packages install `/usr/bin/modulejail`, the README, and the LICENSE under
+`/usr/share/doc/modulejail/`. They depend on `coreutils`, `findutils`, and
+`awk`/`gawk` (all standard) and recommend `curl` or `wget` so the optional
+post-run update check can reach GitHub.
+
+To rebuild the packages locally from a checkout:
+
+```sh
+./packaging/build.sh           # builds whatever this host's tooling supports
+./packaging/build.sh --deb     # .deb only (requires dpkg-deb)
+./packaging/build.sh --rpm     # .rpm only (requires rpmbuild)
+```
+
+Output goes to `packaging/dist/`. The script skips gracefully on hosts
+without the matching tooling.
 
 ## Why?
 
@@ -200,6 +231,25 @@ at hardening time" across machines: two hosts with the same fingerprint had
 identical loaded sets, baseline, whitelist, profile, and kernel version when
 ModuleJail ran. No wall-clock drift, no spurious diffs in configuration
 management systems.
+
+## Update check
+
+After a successful run, ModuleJail performs a best-effort lookup against the
+GitHub tags API to see whether a newer release is available. The check has a
+10-second hard timeout and is silent on every failure mode (no network, no
+`curl` or `wget` installed, parse failure, current version equal to or newer
+than the latest tag). It only prints a stderr notice when the upstream
+release is strictly newer than the running version.
+
+To disable the check entirely (for offline fleets, restricted networks, or
+pipeline-style automation where any unexpected output is noise), set:
+
+```sh
+export MODULEJAIL_NO_UPDATE_CHECK=1
+```
+
+The check fires only on a successful run. Error paths (bad arguments,
+missing `/proc/modules`, sanity-guard trip, etc.) exit before reaching it.
 
 ## Cross-distro support
 

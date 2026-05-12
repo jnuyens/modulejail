@@ -15,7 +15,7 @@ export LC_ALL
 # --- Tool version + sysexits.h exit code constants ---
 # VERSION is the single source of truth for both --version and the
 # generated blacklist header. Bump on every release per SemVer.
-VERSION='1.0.1'
+VERSION='1.1.0'
 EX_OK=0
 # sysexits.h conventional codes (see man 3 sysexits):
 #   64=usage 66=noinput 70=software 71=oserr 73=cantcreat 77=noperm
@@ -99,6 +99,10 @@ usage() {
     printf '  71  OS-level error (mktemp work dir, or find errors on /lib/modules)\n'
     printf '  73  output path cannot be created (symlink/directory/trailing-slash, or mktemp failure)\n'
     printf '  77  target directory not writable (try sudo, or use -o <other-path>)\n'
+    printf '\n'
+    printf 'Environment:\n'
+    printf '  MODULEJAIL_NO_UPDATE_CHECK   Set to any non-empty value to skip the post-run\n'
+    printf '                               check for a newer release on GitHub.\n'
 }
 
 # --- Argument parser (manual case loop — POSIX, supports long options) ---
@@ -413,5 +417,94 @@ mv -- "$tmp" "$output"
 # --verbose toggle in v1: this single line is already minimal.
 printf 'modulejail: blacklisted %d of %d modules (profile=%s) -> %s\n' \
     "$blacklist_count" "$universe_count" "$profile" "$output"
+
+# === UPDATE CHECK ===
+# Best-effort, silent on any failure. Fetches the GitHub "latest release"
+# redirect target with a 10-second hard timeout and prints a stderr notice
+# only when the discovered tag is strictly newer than VERSION.
+# Honours MODULEJAIL_NO_UPDATE_CHECK=<any non-empty value> to skip.
+
+# ver_cmp: pure-shell SemVer X.Y.Z comparator.
+# Prints 1 if $1 > $2, -1 if $1 < $2, 0 otherwise. Missing or non-numeric
+# components are treated as 0 (defensive: garbage in, 0 out, never error).
+ver_cmp() {
+    a=$1; b=$2
+    a1=${a%%.*}; a_rest=${a#*.}
+    case "$a_rest" in "$a") a_rest=0.0 ;; esac
+    a2=${a_rest%%.*}; a_rest=${a_rest#*.}
+    case "$a_rest" in "$a2") a_rest=0 ;; esac
+    a3=${a_rest%%.*}
+    b1=${b%%.*}; b_rest=${b#*.}
+    case "$b_rest" in "$b") b_rest=0.0 ;; esac
+    b2=${b_rest%%.*}; b_rest=${b_rest#*.}
+    case "$b_rest" in "$b2") b_rest=0 ;; esac
+    b3=${b_rest%%.*}
+    case "$a1" in ''|*[!0-9]*) a1=0 ;; esac
+    case "$a2" in ''|*[!0-9]*) a2=0 ;; esac
+    case "$a3" in ''|*[!0-9]*) a3=0 ;; esac
+    case "$b1" in ''|*[!0-9]*) b1=0 ;; esac
+    case "$b2" in ''|*[!0-9]*) b2=0 ;; esac
+    case "$b3" in ''|*[!0-9]*) b3=0 ;; esac
+    if [ "$a1" -gt "$b1" ]; then echo 1; return; fi
+    if [ "$a1" -lt "$b1" ]; then echo -1; return; fi
+    if [ "$a2" -gt "$b2" ]; then echo 1; return; fi
+    if [ "$a2" -lt "$b2" ]; then echo -1; return; fi
+    if [ "$a3" -gt "$b3" ]; then echo 1; return; fi
+    if [ "$a3" -lt "$b3" ]; then echo -1; return; fi
+    echo 0
+}
+
+# check_for_updates: best-effort latest-tag lookup against the GitHub
+# tags API. Always returns 0; the only externally visible effect is a
+# possible stderr notice when a strictly-newer tag is reachable.
+# URL is overridable via the undocumented MODULEJAIL_UPDATE_URL
+# (test-only plumbing, cf. MODULEJAIL_PROC_MODULES and MODULEJAIL_KVER
+# above). The tags API is used rather than the /releases/latest
+# redirect because it works whether or not GitHub Release objects have
+# been created for the tags.
+check_for_updates() {
+    [ -n "${MODULEJAIL_NO_UPDATE_CHECK:-}" ] && return 0
+    update_url=${MODULEJAIL_UPDATE_URL:-https://api.github.com/repos/jnuyens/modulejail/tags}
+
+    body=
+    if command -v curl >/dev/null 2>&1; then
+        # -f: fail on HTTP 4xx/5xx. -s: silent. -L: follow redirects.
+        # --max-time 10: hard wall-clock cap.
+        body=$(curl -fsL --max-time 10 "$update_url" 2>/dev/null) || return 0
+    elif command -v wget >/dev/null 2>&1; then
+        body=$(wget --quiet \
+                    --max-redirect=5 \
+                    --timeout=10 \
+                    --output-document=- \
+                    "$update_url" 2>/dev/null) || return 0
+    else
+        return 0
+    fi
+
+    # Extract the first "name": "..." value from the JSON array.
+    # The tags API returns tags newest-first, so the first match is the
+    # latest. Awk on " as the delimiter pulls field 4 from
+    #     "name": "vX.Y.Z",
+    # which is "vX.Y.Z" (without quotes).
+    latest_tag=$(printf '%s\n' "$body" \
+                 | awk -F'"' '/^[[:space:]]*"name"[[:space:]]*:/ { print $4; exit }')
+    [ -n "$latest_tag" ] || return 0
+
+    latest_ver=${latest_tag#v}
+    case "$latest_ver" in
+        [0-9]*.[0-9]*.[0-9]*) ;;
+        *) return 0 ;;
+    esac
+
+    if [ "$(ver_cmp "$latest_ver" "$VERSION")" = "1" ]; then
+        printf 'modulejail: notice: a newer release is available: v%s (you have %s)\n' \
+            "$latest_ver" "$VERSION" >&2
+        printf 'modulejail: notice: https://github.com/jnuyens/modulejail/releases/latest\n' >&2
+        printf 'modulejail: notice: set MODULEJAIL_NO_UPDATE_CHECK=1 to disable this check\n' >&2
+    fi
+    return 0
+}
+
+check_for_updates
 
 exit $EX_OK

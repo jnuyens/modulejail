@@ -1,0 +1,22 @@
+Package: modulejail
+Version: __VERSION__
+Section: admin
+Priority: optional
+Architecture: all
+Maintainer: Jasper Nuyens <jnuyens@linuxbe.com>
+Depends: coreutils, findutils, awk | mawk | gawk | original-awk
+Recommends: curl | wget
+Homepage: https://github.com/jnuyens/modulejail
+Description: Shrink Linux kernel-module attack surface
+ ModuleJail snapshots the set of currently loaded modules and writes a
+ modprobe.d blacklist for every kernel module not currently in use,
+ minus a built-in baseline and an optional sysadmin-supplied whitelist.
+ .
+ Aimed at Linux fleet operators who need to harden many servers against
+ the wave of AI-assisted kernel privilege-escalation discoveries. Every
+ additional loaded module is additional latent attack surface for the
+ next disclosed CVE.
+ .
+ No daemon, no continuous monitoring, no AI inside the tool. One shell
+ script, run once on a steady-state host, that writes one modprobe.d
+ blacklist file.

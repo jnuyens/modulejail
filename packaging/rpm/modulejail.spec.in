@@ -1,0 +1,55 @@
+Name:           modulejail
+Version:        __VERSION__
+Release:        1%{?dist}
+Summary:        Shrink Linux kernel-module attack surface
+
+License:        GPL-3.0-only
+URL:            https://github.com/jnuyens/modulejail
+Source0:        %{name}-%{version}.tar.gz
+
+BuildArch:      noarch
+Requires:       coreutils
+Requires:       findutils
+Requires:       gawk
+Recommends:     curl
+
+%description
+ModuleJail snapshots the set of currently loaded modules and writes a
+modprobe.d blacklist for every kernel module not currently in use,
+minus a built-in baseline and an optional sysadmin-supplied whitelist.
+
+Aimed at Linux fleet operators who need to harden many servers against
+the wave of AI-assisted kernel privilege-escalation discoveries. Every
+additional loaded module is additional latent attack surface for the
+next disclosed CVE.
+
+No daemon, no continuous monitoring, no AI inside the tool. One shell
+script, run once on a steady-state host, that writes one modprobe.d
+blacklist file.
+
+%prep
+%setup -q
+
+%install
+install -Dm755 modulejail %{buildroot}%{_bindir}/modulejail
+install -Dm644 README.md  %{buildroot}%{_docdir}/%{name}/README.md
+install -Dm644 LICENSE    %{buildroot}%{_docdir}/%{name}/LICENSE
+
+%files
+%{_bindir}/modulejail
+%dir %{_docdir}/%{name}
+%doc %{_docdir}/%{name}/README.md
+%license %{_docdir}/%{name}/LICENSE
+
+%changelog
+* Tue May 12 2026 Jasper Nuyens <jnuyens@linuxbe.com> - __VERSION__-1
+- Adds .deb and .rpm packaging.
+- Adds optional post-run check for a newer release on GitHub: silent on
+  any failure, 10-second hard timeout, only complains when reachable
+  and a newer tag exists. Honours MODULEJAIL_NO_UPDATE_CHECK.
+
+* Tue May 12 2026 Jasper Nuyens <jnuyens@linuxbe.com> - 1.0.1-1
+- Documentation cleanup release.
+
+* Tue May 12 2026 Jasper Nuyens <jnuyens@linuxbe.com> - 1.0.0-1
+- Initial release.

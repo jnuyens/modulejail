@@ -12,6 +12,13 @@ set -eu
 LC_ALL=C
 export LC_ALL
 
+# --- Tool version + sysexits.h exit code constants ---
+# VERSION is the single source of truth for both --version and the
+# generated blacklist header. Bump on every release per SemVer.
+VERSION='1.0.0'
+EX_OK=0
+# (additional EX_* codes added in Plan 02 sysexits refactor)
+
 # --- Defaults (set before arg parsing) ---
 profile=conservative
 output=/etc/modprobe.d/modulejail-blacklist.conf
@@ -39,6 +46,21 @@ BASELINE_CONSERVATIVE="$BASELINE_MINIMAL virtio virtio_ring virtio_pci virtio_bl
 # shellcheck disable=SC2034  # used by Plan 02 pipeline
 BASELINE_DESKTOP="$BASELINE_CONSERVATIVE drm drm_kms_helper i915 amdgpu radeon nouveau nvidia ttm video backlight cfg80211 mac80211 iwlwifi iwlmvm iwldvm ath9k ath10k_core ath10k_pci ath11k brcmfmac brcmsmac rtw88_core rtw89_core rtl8xxxu bluetooth btusb btintel btrtl btbcm hci_uart snd snd_pcm snd_timer snd_hda_intel snd_hda_codec snd_hda_codec_realtek snd_hda_codec_hdmi snd_hda_codec_generic snd_usb_audio snd_seq xhci_hcd xhci_pci ehci_hcd ehci_pci uhci_hcd usblp cdc_acm joydev evdev videodev uvcvideo media"
 
+# === SYSADMIN WHITELIST ===
+# Site-local additions to the keep-set, in addition to the selected baseline
+# profile. Modules listed here will never appear in the generated blacklist.
+#
+# Format: space-separated module names in canonical underscore form
+#         (the pipeline normalizes - to _, so either form works).
+# Default: empty.
+#
+# Example (uncomment and adapt — `nft_compat` is the iptables-nft
+# compatibility shim, a plausible netfilter module a sysadmin running
+# iptables on a modern host might want to keep beyond the baseline):
+# WHITELIST='nft_compat xt_owner'
+WHITELIST=''
+# === END SYSADMIN WHITELIST ===
+
 # --- usage(): print help text; caller decides exit code ---
 usage() {
     printf 'modulejail — shrink a Linux host'\''s kernel-module attack surface\n'
@@ -50,6 +72,7 @@ usage() {
     printf '                    Built-in baseline profile (default: conservative)\n'
     printf '  -o, --output PATH Output path for the generated blacklist file\n'
     printf '                    (default: /etc/modprobe.d/modulejail-blacklist.conf)\n'
+    printf '  -V, --version     Show program version and exit\n'
     printf '  -h, --help        Show this help text and exit\n'
     printf '\n'
     printf 'Profiles:\n'
@@ -86,6 +109,12 @@ while [ $# -gt 0 ]; do
         -h|--help)
             usage
             exit 0
+            ;;
+        -V|--version)
+            printf 'modulejail %s\n' "$VERSION"
+            printf 'https://github.com/jnuyens/modulejail\n'
+            printf 'License: GPL-3.0-only (https://spdx.org/licenses/GPL-3.0-only.html)\n'
+            exit $EX_OK
             ;;
         --)
             shift
@@ -241,6 +270,19 @@ list_baseline() {
     # intentional word-splitting — BASELINE_* are POSIX space-separated lists, not bash arrays
     # shellcheck disable=SC2086
     for x in $list; do
+        printf '%s\n' "$x"
+    done \
+    | tr '-' '_' \
+    | sort -u
+}
+
+# list_whitelist: expand $WHITELIST into a sorted, deduplicated list of
+# canonical underscore module names. Parallel to list_baseline above.
+# shellcheck disable=SC2329  # invoked by Task 2 pipeline integration
+list_whitelist() {
+    # intentional word-splitting — WHITELIST is a POSIX space-separated list, not bash array
+    # shellcheck disable=SC2086
+    for x in $WHITELIST; do
         printf '%s\n' "$x"
     done \
     | tr '-' '_' \

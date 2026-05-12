@@ -53,13 +53,19 @@ build_deb() {
 
     mkdir -p "$work/DEBIAN" \
              "$work/usr/bin" \
-             "$work/usr/share/doc/modulejail"
+             "$work/usr/share/doc/modulejail" \
+             "$work/usr/share/man/man8"
 
     sed "s/__VERSION__/$VERSION/g" packaging/debian/control.in > "$work/DEBIAN/control"
 
     install -m 0755 modulejail                  "$work/usr/bin/modulejail"
     install -m 0644 packaging/debian/copyright  "$work/usr/share/doc/modulejail/copyright"
     install -m 0644 README.md                   "$work/usr/share/doc/modulejail/README.md"
+
+    # Manpage: substitute __VERSION__, then gzip with -n (no name/timestamp)
+    # so the .deb is byte-deterministic across rebuilds with identical inputs.
+    sed "s/__VERSION__/$VERSION/g" man/modulejail.8.in > "$work/usr/share/man/man8/modulejail.8"
+    gzip -9n "$work/usr/share/man/man8/modulejail.8"
 
     out="$DIST/modulejail_${VERSION}_all.deb"
     dpkg-deb --build --root-owner-group "$work" "$out" >/dev/null
@@ -82,9 +88,12 @@ build_rpm() {
     mkdir -p "$work/SOURCES" "$work/SPECS" "$work/BUILD" "$work/RPMS" "$work/SRPMS" "$work/BUILDROOT"
 
     # Stage the source tarball that the spec's %setup will unpack.
+    # Manpage source is templated and pre-substituted here so the spec's
+    # %install can just copy it into the buildroot.
     staging=$(mktemp -d "${TMPDIR:-/tmp}/modulejail-rpm-stage.XXXXXX")
     mkdir -p "$staging/$tardir"
     cp modulejail README.md LICENSE "$staging/$tardir/"
+    sed "s/__VERSION__/$VERSION/g" man/modulejail.8.in > "$staging/$tardir/modulejail.8"
     tar -czf "$work/SOURCES/$tardir.tar.gz" -C "$staging" "$tardir"
     rm -rf "$staging"
 

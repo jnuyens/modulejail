@@ -166,8 +166,12 @@ if [ ! -e "${MODULEJAIL_PROC_MODULES:-/proc/modules}" ]; then
         "${MODULEJAIL_PROC_MODULES:-/proc/modules}" >&2
     exit $EX_NOINPUT
 fi
-if [ ! -d "/lib/modules/$(uname -r)" ]; then
-    printf 'modulejail: error: /lib/modules/%s does not exist (kernel module tree missing)\n' "$(uname -r)" >&2
+# Kernel version overridable via MODULEJAIL_KVER for test fixtures
+# (test-only plumbing; containers share the host kernel via uname -r,
+# so synthetic module trees need a pinned version).
+_kver="${MODULEJAIL_KVER:-$(uname -r)}"
+if [ ! -d "/lib/modules/$_kver" ]; then
+    printf 'modulejail: error: /lib/modules/%s does not exist (kernel module tree missing)\n' "$_kver" >&2
     exit $EX_NOINPUT
 fi
 
@@ -223,7 +227,9 @@ workdir=$(mktemp -d "${TMPDIR:-/tmp}/modulejail.XXXXXX") || {
 tmp=
 # shellcheck disable=SC2329  # invoked via trap string, not direct call
 cleanup() {
+    # shellcheck disable=SC2317  # invoked via trap string, not direct call
     rm -rf "$workdir"
+    # shellcheck disable=SC2317  # invoked via trap string, not direct call
     [ -n "${tmp:-}" ] && rm -f "$tmp"
 }
 trap cleanup EXIT INT HUP TERM
@@ -243,11 +249,11 @@ trap cleanup EXIT INT HUP TERM
 list_universe() {
     find_out=$workdir/find.out
     find_err=$workdir/find.err
-    find "/lib/modules/$(uname -r)" -type f -name '*.ko*' \
+    find "/lib/modules/$_kver" -type f -name '*.ko*' \
         >"$find_out" 2>"$find_err"
     if [ -s "$find_err" ]; then
         printf 'modulejail: error: find reported errors walking /lib/modules/%s:\n' \
-            "$(uname -r)" >&2
+            "$_kver" >&2
         cat "$find_err" >&2
         printf 'modulejail: error: refusing to produce a partial blacklist.\n' >&2
         exit $EX_OSERR
@@ -354,7 +360,7 @@ fi
 {
     printf 'modulejail-fingerprint:v1\n'
     printf 'profile:%s\n' "$profile"
-    printf 'kernel:%s\n' "$(uname -r)"
+    printf 'kernel:%s\n' "$_kver"
     printf 'loaded:\n'
     cat "$workdir/loaded.txt"
     printf 'baseline:\n'
@@ -388,7 +394,7 @@ tmp=$(mktemp "${target_dir}/.modulejail-blacklist.conf.XXXXXX") || {
     printf '# modulejail %s\n' "$VERSION"
     printf '# https://github.com/jnuyens/modulejail\n'
     printf '# profile: %s\n' "$profile"
-    printf '# kernel: %s\n' "$(uname -r)"
+    printf '# kernel: %s\n' "$_kver"
     printf '# fingerprint: sha256:%s\n' "$fingerprint"
     printf '# Do not edit by hand — regenerate with modulejail(8).\n'
     awk '{print "install " $1 " /bin/true"}' "$blacklist"

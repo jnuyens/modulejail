@@ -21,6 +21,7 @@ EX_OK=0
 #   64=usage 66=noinput 70=software 71=oserr 73=cantcreat 77=noperm
 EX_USAGE=64
 EX_NOINPUT=66
+EX_UNAVAILABLE=69
 EX_SOFTWARE=70
 EX_OSERR=71
 EX_CANTCREAT=73
@@ -481,7 +482,8 @@ check_for_updates() {
         # are not needed.
         body=$(wget -q -T 10 -O - "$update_url" 2>/dev/null) || return 0
     else
-        return 0
+        printf 'modulejail: error: no curl/wget, set MODULEJAIL_NO_UPDATE_CHECK=1 to avoid\n' >&2
+        return $EX_UNAVAILABLE
     fi
 
     # Extract the first "name": "..." value from the JSON array.

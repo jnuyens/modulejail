@@ -257,7 +257,14 @@ cleanup() {
     # shellcheck disable=SC2317  # invoked via trap string, not direct call
     rm -rf "$workdir"
     # shellcheck disable=SC2317  # invoked via trap string, not direct call
-    [ -n "${tmp:-}" ] && rm -f "$tmp"
+    if [ -n "${tmp:-}" ]; then rm -f "$tmp"; fi
+    # Always return 0 from the EXIT trap. Under dash/POSIX /bin/sh, an
+    # EXIT trap whose last command exits non-zero CLOBBERS the script's
+    # original exit status. The previous `[ -n "$tmp" ] && rm -f "$tmp"`
+    # idiom returned 1 whenever $tmp was still empty (every error path
+    # before the render block), masking explicit `exit $EX_*` codes.
+    # Surfaced by the new whitelist-file rejection paths (Plan 03-01).
+    return 0
 }
 trap cleanup EXIT INT HUP TERM
 
@@ -409,9 +416,15 @@ parse_whitelist_file() {
 }
 
 list_baseline > "$workdir/baseline.txt"
+# parse_whitelist_file may exit non-zero (EX_NOINPUT / EX_NOPERM /
+# EX_DATAERR / EX_OSERR). POSIX /bin/sh has no `pipefail`, so the helper
+# must run OUTSIDE any pipeline for its exits to propagate to the
+# top-level script. Capture its output to a tempfile, then merge with
+# list_whitelist via sort -u.
+parse_whitelist_file "$WHITELIST_FILE" > "$workdir/whitelist-file.txt"
 {
     list_whitelist
-    parse_whitelist_file "$WHITELIST_FILE"
+    cat "$workdir/whitelist-file.txt"
 } | sort -u > "$workdir/whitelist.txt"
 
 # Compose total keep-list: loaded modules union baseline union whitelist (sorted, deduped).

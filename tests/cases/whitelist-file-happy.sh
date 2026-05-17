@@ -29,17 +29,19 @@ OUT=$CASE_TMP/out.conf
     case_fail "modulejail exited $? (expected 0); stderr=$(cat "$CASE_TMP/stderr")"
 
 # Modules in the whitelist file MUST NOT appear as install lines in the
-# blacklist - they are in the keep-set, so they are excluded.
-if grep -qE '^install vfio_pci /bin/true$' "$OUT"; then
+# blacklist - they are in the keep-set, so they are excluded. The install
+# line body varies (/bin/true vs /bin/sh + logger, per Plan 03-02), so the
+# pattern matches "^install <name> " agnostically.
+if grep -qE '^install vfio_pci ' "$OUT"; then
     case_fail "vfio_pci should not be blacklisted (it is in the whitelist file)"
 fi
-if grep -qE '^install nft_compat /bin/true$' "$OUT"; then
+if grep -qE '^install nft_compat ' "$OUT"; then
     case_fail "nft_compat should not be blacklisted (it is in the whitelist file)"
 fi
 
 # Sanity: at least one module IS blacklisted (the fixture pads with ~50
-# dummies that nothing keeps).
-if ! grep -qE '^install dummy_[0-9]+ /bin/true$' "$OUT"; then
+# dummies that nothing keeps). Pattern is install-line-form-agnostic.
+if ! grep -qE '^install dummy_[0-9]+ ' "$OUT"; then
     case_fail "no dummy_* module ended up in the blacklist; pipeline did not run"
 fi
 

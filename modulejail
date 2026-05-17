@@ -18,8 +18,9 @@ export LC_ALL
 VERSION='1.1.4'
 EX_OK=0
 # sysexits.h conventional codes (see man 3 sysexits):
-#   64=usage 66=noinput 70=software 71=oserr 73=cantcreat 77=noperm
+#   64=usage 65=dataerr 66=noinput 70=software 71=oserr 73=cantcreat 77=noperm
 EX_USAGE=64
+EX_DATAERR=65
 EX_NOINPUT=66
 EX_SOFTWARE=70
 EX_OSERR=71
@@ -29,6 +30,7 @@ EX_NOPERM=77
 # --- Defaults (set before arg parsing) ---
 profile=conservative
 output=/etc/modprobe.d/modulejail-blacklist.conf
+WHITELIST_FILE=''
 
 # --- Built-in baseline module lists (space-separated strings, not bash arrays) ---
 # Each profile inherits from the one above via variable interpolation (DRY).
@@ -79,6 +81,10 @@ usage() {
     printf '                    Built-in baseline profile (default: conservative)\n'
     printf '  -o, --output PATH Output path for the generated blacklist file\n'
     printf '                    (default: /etc/modprobe.d/modulejail-blacklist.conf)\n'
+    printf '  --whitelist-file PATH\n'
+    printf '                    Append module names from PATH to the keep-set.\n'
+    printf '                    One module per line; '\''#'\'' starts a comment.\n'
+    printf '                    File must not be group- or world-writable.\n'
     printf '  -V, --version     Show program version and exit\n'
     printf '  -h, --help        Show this help text and exit\n'
     printf '\n'
@@ -94,6 +100,7 @@ usage() {
     printf 'Exit codes:\n'
     printf '  0   success\n'
     printf '  64  command-line argument error (bad flag, missing value, unknown profile)\n'
+    printf '  65  invalid data in whitelist file (malformed module name)\n'
     printf '  66  required kernel input missing (/proc/modules or /lib/modules/<kernel>)\n'
     printf '  70  sanity guard tripped (empty blacklist or >99%% of modules blacklisted)\n'
     printf '  71  OS-level error (mktemp work dir, or find errors on /lib/modules)\n'
@@ -124,6 +131,16 @@ while [ $# -gt 0 ]; do
             ;;
         --output=*)
             output=${1#--output=}
+            shift
+            ;;
+        --whitelist-file)
+            [ $# -ge 2 ] || { printf 'modulejail: error: --whitelist-file requires PATH argument\n' >&2; exit $EX_USAGE; }
+            WHITELIST_FILE="$2"
+            shift 2
+            ;;
+        --whitelist-file=*)
+            WHITELIST_FILE="${1#*=}"
+            [ -n "$WHITELIST_FILE" ] || { printf 'modulejail: error: --whitelist-file= requires non-empty PATH\n' >&2; exit $EX_USAGE; }
             shift
             ;;
         -h|--help)
@@ -173,8 +190,15 @@ fi
 # (test-only plumbing; containers share the host kernel via uname -r,
 # so synthetic module trees need a pinned version).
 _kver="${MODULEJAIL_KVER:-$(uname -r)}"
-if [ ! -d "/lib/modules/$_kver" ]; then
-    printf 'modulejail: error: /lib/modules/%s does not exist (kernel module tree missing)\n' "$_kver" >&2
+# Modules-tree root overridable via MODULEJAIL_MODULES_ROOT for test
+# fixtures (test-only plumbing, cf. MODULEJAIL_PROC_MODULES / MODULEJAIL_KVER).
+# End-user operators leave it unset (defaults to /lib/modules). This lets
+# host-local case scripts on a non-Linux dev box build a synthetic tree under
+# $TMPDIR and exercise the full pipeline without requiring root or a writable
+# /lib/modules.
+_modules_root="${MODULEJAIL_MODULES_ROOT:-/lib/modules}"
+if [ ! -d "$_modules_root/$_kver" ]; then
+    printf 'modulejail: error: %s/%s does not exist (kernel module tree missing)\n' "$_modules_root" "$_kver" >&2
     exit $EX_NOINPUT
 fi
 
@@ -237,8 +261,9 @@ cleanup() {
 }
 trap cleanup EXIT INT HUP TERM
 
-# list_universe: walk the FULL /lib/modules/$(uname -r) tree (NOT just kernel/)
-# so DKMS and weak-updates modules are included.
+# list_universe: walk the FULL modules tree at $_modules_root/$_kver
+# (default: /lib/modules/$(uname -r), NOT just kernel/) so DKMS and
+# weak-updates modules are included.
 # Strip exactly the four known suffixes (.ko, .ko.gz, .ko.xz, .ko.zst);
 # lines that do not match a known suffix are dropped (precision filter for
 # the *.ko* glob). Normalize - to _. Output is sorted, deduped.
@@ -252,11 +277,11 @@ trap cleanup EXIT INT HUP TERM
 list_universe() {
     find_out=$workdir/find.out
     find_err=$workdir/find.err
-    find "/lib/modules/$_kver" -type f -name '*.ko*' \
+    find "$_modules_root/$_kver" -type f -name '*.ko*' \
         >"$find_out" 2>"$find_err"
     if [ -s "$find_err" ]; then
-        printf 'modulejail: error: find reported errors walking /lib/modules/%s:\n' \
-            "$_kver" >&2
+        printf 'modulejail: error: find reported errors walking %s/%s:\n' \
+            "$_modules_root" "$_kver" >&2
         cat "$find_err" >&2
         printf 'modulejail: error: refusing to produce a partial blacklist.\n' >&2
         exit $EX_OSERR
@@ -320,8 +345,74 @@ list_whitelist() {
     | sort -u
 }
 
+# parse_whitelist_file: validate and parse the optional --whitelist-file.
+# Stdin: none. Stdout: zero or more module names, one per line (unsorted).
+# Side effects: errors to stderr and exits non-zero on any rejection.
+# Exit codes:
+#   65 (EX_DATAERR) - malformed module name on any non-comment line
+#   66 (EX_NOINPUT) - file does not exist or is unreadable
+#   77 (EX_NOPERM)  - file is group- or world-writable
+parse_whitelist_file() {
+    _wf="$1"
+    [ -n "$_wf" ] || return 0   # no file passed; no-op
+    if [ ! -r "$_wf" ]; then
+        printf 'modulejail: error: whitelist file %s does not exist or is not readable\n' "$_wf" >&2
+        exit $EX_NOINPUT
+    fi
+    # Permission check: refuse if group- or world-writable. Use stat with
+    # GNU-form first, BSD-form fallback (macOS, *BSD). The result is an
+    # octal mode string like "644", "664", "666", or "0644" (some stats
+    # include the setuid/setgid/sticky leading digit).
+    _mode=$(stat -c '%a' "$_wf" 2>/dev/null || stat -f '%Lp' "$_wf" 2>/dev/null || echo '')
+    if [ -z "$_mode" ]; then
+        printf 'modulejail: error: could not stat whitelist file %s\n' "$_wf" >&2
+        exit $EX_OSERR
+    fi
+    # POSIX shell has no portable octal arithmetic (bash's $((8#$x)) is
+    # SC3052: non-POSIX). Inspect the group and world octal digits as
+    # strings instead. A digit with the 2-bit set (i.e. write bit) is one
+    # of 2,3,6,7.
+    _last3=$(printf '%s' "$_mode" | awk '{ n=length($0); print substr($0, n-2, 3) }')
+    _group_digit=$(printf '%s' "$_last3" | cut -c2)
+    _other_digit=$(printf '%s' "$_last3" | cut -c3)
+    case "$_group_digit$_other_digit" in
+        *[2367]*)
+            printf 'modulejail: error: whitelist file %s must not be group- or world-writable; run '\''chmod go-w %s'\'' and retry\n' "$_wf" "$_wf" >&2
+            exit $EX_NOPERM
+            ;;
+    esac
+    # Parse the file. Use awk for line-numbered validation - we want the
+    # line number in error messages so operators can find the bad entry.
+    awk -v file="$_wf" '
+        BEGIN { ok = 1 }
+        # Strip CR (handle CRLF line endings gracefully).
+        { sub(/\r$/, "") }
+        # Strip trailing whitespace.
+        { sub(/[[:space:]]+$/, "") }
+        # Skip blank lines.
+        /^[[:space:]]*$/ { next }
+        # Skip comment lines.
+        /^[[:space:]]*#/ { next }
+        # Validate.
+        $0 !~ /^[a-zA-Z0-9_-]+$/ {
+            printf "modulejail: error: whitelist file %s line %d: invalid module name %s (must match [a-zA-Z0-9_-]+)\n", file, NR, $0 > "/dev/stderr"
+            ok = 0
+            next
+        }
+        { print }
+        END { if (!ok) exit 65 }
+    ' "$_wf"
+    _awk_status=$?
+    if [ "$_awk_status" -ne 0 ]; then
+        exit $EX_DATAERR
+    fi
+}
+
 list_baseline > "$workdir/baseline.txt"
-list_whitelist > "$workdir/whitelist.txt"
+{
+    list_whitelist
+    parse_whitelist_file "$WHITELIST_FILE"
+} | sort -u > "$workdir/whitelist.txt"
 
 # Compose total keep-list: loaded modules union baseline union whitelist (sorted, deduped).
 cat "$workdir/loaded.txt" "$workdir/baseline.txt" "$workdir/whitelist.txt" | sort -u > "$workdir/keep.txt"

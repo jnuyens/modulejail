@@ -482,8 +482,8 @@ check_for_updates() {
         # are not needed.
         body=$(wget -q -T 10 -O - "$update_url" 2>/dev/null) || return 0
     else
-        printf 'modulejail: error: no curl/wget, set MODULEJAIL_NO_UPDATE_CHECK=1 to avoid\n' >&2
-        return $EX_UNAVAILABLE
+        printf 'modulejail: error: no curl/wget in PATH\n' >&2
+        return 0
     fi
 
     # Extract the first "name": "..." value from the JSON array.

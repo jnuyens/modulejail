@@ -38,7 +38,7 @@ unused modules, specific to your system.
 ## Quickstart
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.1.4/modulejail | sudo sh
+curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.2.0/modulejail | sudo sh
 ```
 
 > **WARNING: convenient, not safe.** This pipes unverified bytes from the
@@ -48,7 +48,7 @@ The script writes its blacklist to `/etc/modprobe.d/modulejail-blacklist.conf`
 by default. To use a different path:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.1.4/modulejail | sudo sh -s -- -o /etc/modprobe.d/site-blacklist.conf
+curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.2.0/modulejail | sudo sh -s -- -o /etc/modprobe.d/site-blacklist.conf
 ```
 
 ## The safer alternative
@@ -56,7 +56,7 @@ curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.1.4/modulejai
 Download, inspect, then run:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.1.4/modulejail -o /tmp/modulejail
+curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.2.0/modulejail -o /tmp/modulejail
 less /tmp/modulejail
 sudo sh /tmp/modulejail
 ```
@@ -71,12 +71,12 @@ to the GitHub release page:
 
 ```sh
 # Debian / Ubuntu:
-curl -fsSLO https://github.com/jnuyens/modulejail/releases/download/v1.1.4/modulejail_1.1.4_all.deb
-sudo dpkg -i modulejail_1.1.4_all.deb
+curl -fsSLO https://github.com/jnuyens/modulejail/releases/download/v1.2.0/modulejail_1.2.0_all.deb
+sudo dpkg -i modulejail_1.2.0_all.deb
 
 # RHEL / Fedora / Rocky:
-curl -fsSLO https://github.com/jnuyens/modulejail/releases/download/v1.1.4/modulejail-1.1.4-1.noarch.rpm
-sudo rpm -i modulejail-1.1.4-1.noarch.rpm
+curl -fsSLO https://github.com/jnuyens/modulejail/releases/download/v1.2.0/modulejail-1.2.0-1.noarch.rpm
+sudo rpm -i modulejail-1.2.0-1.noarch.rpm
 ```
 
 Both packages install `/usr/bin/modulejail`, the `modulejail(8)` manpage
@@ -105,8 +105,12 @@ ModuleJail snapshots the set of currently loaded modules (`/proc/modules`) and
 computes the complement against the full module tree
 (`/lib/modules/$(uname -r)`). Every module in the complement, minus a built-in
 baseline of essential modules and an optional sysadmin-supplied whitelist, is
-emitted as an `install <mod> /bin/true` directive in a `modprobe.d`-compatible
-blacklist file.
+emitted as an `install <mod>` directive in a `modprobe.d`-compatible
+blacklist file. Since v1.2, the directive body is either
+`/bin/sh -c 'logger -t modulejail "blocked: <mod>" ...; exit 0'` (default
+when `/usr/bin/logger` is available, so blocked attempts produce a syslog
+trail) or `/bin/true` (under `--no-syslog-logging`, silent fallback, or when
+logger is absent). See the *Viewing blocked module attempts* section below.
 
 The tool is aimed at Linux fleet operators who need to harden many servers
 against the wave of AI-assisted kernel privilege-escalation discoveries. Every
@@ -204,6 +208,120 @@ Edit `WHITELIST=''` to add your site-specific modules. The `===` banner
 anchors are designed for Ansible template insertion (`lineinfile` or
 `blockinfile`).
 
+## Site-local whitelist file
+
+Since v1.2, ModuleJail can also read site-local modules from an external
+file via `--whitelist-file PATH`. This is the preferred path when you do
+not want to (or cannot) edit the script in place — for instance because
+you install ModuleJail via `.deb` / `.rpm` / `curl | sh` and your
+site-local additions would otherwise be lost on the next reinstall.
+
+```sh
+# /etc/modulejail/whitelist.conf
+# One module per line. Blank lines and '#' comments are allowed.
+# The file mode MUST NOT be group-writable or world-writable
+# (ModuleJail will refuse to run otherwise).
+
+nft_compat
+xt_owner
+zfs
+```
+
+Then run:
+
+```sh
+sudo modulejail --whitelist-file /etc/modulejail/whitelist.conf
+```
+
+The path is yours to choose; ModuleJail has no default location. Common
+choices on different distros are `/etc/modulejail/whitelist.conf`,
+`/etc/default/modulejail-whitelist`, or an NFS-mounted site-config path.
+
+The file is appended to the in-script `WHITELIST`; the two are additive.
+Operators who have been editing the in-script `WHITELIST` (the v1.0
+path) keep that edit untouched; the file is a no-side-effect overlay on
+top.
+
+ModuleJail enforces two safety gates on the file:
+
+1. **File mode must not be group- or world-writable.** The same
+   hardening sshd applies to `authorized_keys` and sudo applies to
+   `sudoers`. If the file is `g+w` or `o+w`, ModuleJail refuses to run
+   and prints `chmod go-w PATH` as the hint. Exit code is `77`
+   (`EX_NOPERM`). Rationale: the module names from this file land in
+   the generated `modprobe.d` directives, so an attacker with write
+   access to a shared sysadmin group could otherwise inject `install`
+   stanzas the kernel would later run.
+2. **Each line must match `[a-zA-Z0-9_-]+`.** Comments (`#`) and blank
+   lines are skipped silently; everything else must be a plain module
+   name. Any malformed line is rejected with a stderr message citing
+   the file path, line number, and offending content. Exit code is
+   `65` (`EX_DATAERR`).
+
+## Viewing blocked module attempts
+
+Since v1.2, when `/usr/bin/logger` is executable on the host running
+ModuleJail (and `--no-syslog-logging` is not set), the generated
+install lines call `logger -t modulejail "blocked: <module>"` so a
+later `modprobe <module>` attempt produces a syslog entry tagged
+`modulejail`:
+
+```sh
+# systemd hosts (journald):
+sudo journalctl -t modulejail --since '1 hour ago'
+
+# classic syslog hosts:
+sudo grep modulejail /var/log/syslog
+```
+
+The generated file's header annotates which install-line form is in
+use. Look for:
+
+```
+# install-line: /bin/sh + logger (syslog tag: modulejail)
+```
+
+To opt out and restore the exact v1.1.4 `/bin/true` install-line body
+(useful for byte-identical regression contracts, hosts without
+`logger`, or minimal/initramfs builds), pass `--no-syslog-logging`:
+
+```sh
+sudo modulejail --no-syslog-logging
+```
+
+The header annotation then reads:
+
+```
+# install-line: /bin/true (silent; --no-syslog-logging or logger absent)
+```
+
+If `/usr/bin/logger` is absent on the host AND `--no-syslog-logging`
+was not set, ModuleJail silently falls back to the `/bin/true` form
+(matching the v1.1.4 behaviour on minimal hosts). No stderr warning is
+emitted; the header annotation is the only visible cue.
+
+## Scope of the blacklist (what it blocks, what it doesn't)
+
+A `modprobe.d` blacklist blocks **automatic** module loading: udev
+events on hardware hotplug, dependency resolution during
+`modprobe foo`, autoloaded modules through the alias system. It does
+**not** block, by design:
+
+- `insmod /path/to/module.ko` — `insmod` bypasses `modprobe` entirely
+  and never reads `modprobe.d/`. A root user with intent can always
+  insert a module directly.
+- `modprobe --ignore-install <name>` — `modprobe`'s explicit escape
+  hatch. The user is opting out of the install-line indirection that
+  ModuleJail relies on.
+
+Both are intentional escape hatches in the kernel module loader.
+ModuleJail is a default-safe policy layer: it removes the
+auto-loading attack surface (udev hotplug + dependency resolution),
+which is what an unprivileged or remote attacker has to work with. It
+does not — and could not — prevent a root user with intent from
+loading anything they want. Treat the blacklist as the "lock the
+front door" tool, not as the "lock the safe" tool.
+
 ## Exit codes
 
 Exit codes follow `sysexits.h` conventions (see `man 3 sysexits`). Fleet
@@ -213,6 +331,7 @@ automation tools can `case $?` cleanly.
 |------|---------|
 | 0    | success |
 | 64   | command-line argument error (bad flag, missing value, unknown profile) |
+| 65   | invalid data in `--whitelist-file` (malformed module name) |
 | 66   | required kernel input missing (`/proc/modules` or `/lib/modules/<kernel>`) |
 | 70   | sanity guard tripped (empty blacklist or >99% of modules blacklisted) |
 | 71   | OS-level error (mktemp work dir, or find errors on `/lib/modules`) |
@@ -307,10 +426,13 @@ sudo reboot
 sudo modprobe <module_name>
 ```
 
-The generated file uses `install <module> /bin/true` directives, which block
-autoloading. Explicitly loading with `modprobe` overrides the blacklist for
-the current boot session only; the restriction re-applies after the next
-reboot unless the file has been removed.
+The generated file uses `install <module> ...` directives (with either a
+`/bin/sh + logger` body or `/bin/true`, see *Viewing blocked module
+attempts* above), which block autoloading. Explicitly loading with
+`modprobe` overrides the blacklist for the current boot session only;
+the restriction re-applies after the next reboot unless the file has
+been removed. See *Scope of the blacklist* above for the precise list of
+what `modprobe.d` install directives do and do not intercept.
 
 ## Contributing
 

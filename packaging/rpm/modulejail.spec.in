@@ -44,7 +44,24 @@ install -Dm644 modulejail.8 %{buildroot}%{_mandir}/man8/modulejail.8
 %{_mandir}/man8/modulejail.8*
 
 %changelog
-* Wed May 13 2026 Jasper Nuyens <jnuyens@linuxbe.com> - __VERSION__-1
+* Mon May 18 2026 Jasper Nuyens <jnuyens@linuxbe.com> - __VERSION__-1
+- Add --whitelist-file PATH flag (closes GitHub Issue #2). Reads a
+  site-local whitelist file (one module per line, # comments, blank
+  lines ignored), validates each line against [a-zA-Z0-9_-]+, refuses
+  group- or world-writable files, and appends valid names to the
+  in-script WHITELIST.  Operators no longer lose site-local additions
+  on .deb/.rpm/curl|sh reinstalls.
+- Add --no-syslog-logging flag.  Default behaviour change: when
+  /usr/bin/logger is executable on the host, generated install lines
+  now call logger with tag 'modulejail' so blocked module loads are
+  visible via 'journalctl -t modulejail' or 'grep modulejail
+  /var/log/syslog'.  --no-syslog-logging restores the v1.1.4
+  /bin/true install-line body byte-for-byte.
+- Add archived v1.1.4 regression fixture under
+  tests/fixtures/v1.1.4-regression/, exercising the body-identical
+  invariant as a permanent baseline.
+
+* Wed May 13 2026 Jasper Nuyens <jnuyens@linuxbe.com> - 1.1.4-1
 - Add project logo to README.
 - Test infra: update container fixture to be version-agnostic (was
   hardcoded to 1.0.0 strings) and add four new assertions covering the

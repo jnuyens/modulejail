@@ -16,7 +16,9 @@
 #      Phase 1 methodology preserved — no risk to host /etc/modprobe.d/)
 #   7. Idempotency: second run → cmp byte-identical
 #   8. Success-line shape regex check on the run-6 stdout
-#   9. Generated file header shape: line 1 = "# modulejail 1.0.0",
+#   9. Generated file header shape: line 1 = "# modulejail <VERSION>"
+#      (VERSION auto-derived from the modulejail script under test, so
+#      the assertion survives future SemVer bumps without edits),
 #      line 5 = "# fingerprint: sha256:<64 hex>"
 #  10. PORT-01 grep assertion (no per-distro branches in the script that
 #      was just copied over)
@@ -40,6 +42,17 @@ SCRIPT=$REPO_ROOT/modulejail
 
 if [ ! -f "$SCRIPT" ]; then
     printf 'run-ssh-hosts: error: cannot find modulejail at %s\n' "$SCRIPT" >&2
+    exit 1
+fi
+
+# Derive the expected version from the script under test so the line-1
+# header assertion below stays correct across SemVer bumps. Previously
+# this was hardcoded to "# modulejail 1.0.0" and required a manual edit
+# on every release. Plan 03-03 bumps VERSION to 1.2.0; rather than chasing
+# the literal string here, read it from the source.
+EXPECTED_VERSION=$(awk -F"'" '/^VERSION=/ {print $2; exit}' "$SCRIPT")
+if [ -z "$EXPECTED_VERSION" ]; then
+    printf 'run-ssh-hosts: error: cannot determine VERSION from %s\n' "$SCRIPT" >&2
     exit 1
 fi
 
@@ -123,8 +136,8 @@ run_host() {
     ssh "$host" 'head -6 /tmp/mj-host-run1.conf' > "/tmp/mj-${host}-head.out"
     line1=$(sed -n '1p' "/tmp/mj-${host}-head.out")
     line5=$(sed -n '5p' "/tmp/mj-${host}-head.out")
-    if [ "$line1" != "# modulejail 1.0.0" ]; then
-        printf '[%s] FAIL: header line 1 was: %s\n' "$host" "$line1" >&2; return 1
+    if [ "$line1" != "# modulejail $EXPECTED_VERSION" ]; then
+        printf '[%s] FAIL: header line 1 was: %s (expected: # modulejail %s)\n' "$host" "$line1" "$EXPECTED_VERSION" >&2; return 1
     fi
     if ! printf '%s\n' "$line5" | grep -qE '^# fingerprint: sha256:[0-9a-f]{64}$'; then
         printf '[%s] FAIL: header line 5 was: %s\n' "$host" "$line5" >&2; return 1

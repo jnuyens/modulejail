@@ -1,7 +1,10 @@
 .\" Manpage for modulejail.
 .\" Source: man/modulejail.8.in (templated; build.sh substitutes __VERSION__).
 .\" View installed: man 8 modulejail
-.TH MODULEJAIL 8 "2026-05-13" "modulejail __VERSION__" "System Administration"
+.\" v1.2 flags documented below: --whitelist-file PATH, --no-syslog-logging
+.\" (the OPTIONS section uses roff hyphen escapes \-\- so these strings appear
+.\" with literal ASCII dashes only in this comment, for grep-based contract checks.)
+.TH MODULEJAIL 8 "2026-05-18" "modulejail __VERSION__" "System Administration"
 
 .SH NAME
 modulejail \- shrink a Linux host's kernel-module attack surface
@@ -12,6 +15,9 @@ modulejail \- shrink a Linux host's kernel-module attack surface
 .IR profile ]
 .RB [ \-o
 .IR output ]
+.RB [ \-\-whitelist\-file
+.IR path ]
+.RB [ \-\-no\-syslog\-logging ]
 .br
 .B modulejail
 .RB { \-h | \-\-help | \-V | \-\-version }
@@ -31,11 +37,28 @@ Every module in the complement, minus a built-in baseline of essential
 modules and an optional sysadmin-supplied whitelist, is emitted as an
 .B install
 .I mod
-.B /bin/true
+.I <body>
 directive in
 .I /etc/modprobe.d/modulejail-blacklist.conf
 (or the path passed to
 .BR \-o ).
+Since v1.2, when
+.I /usr/bin/logger
+is executable on the host and
+.B \-\-no\-syslog\-logging
+is not set,
+.I <body>
+is a small shell invocation that calls
+.BR logger (1)
+with tag
+.B modulejail
+so blocked module load attempts produce a syslog entry; otherwise
+.I <body>
+is
+.BR /bin/true ,
+matching the silent v1.1.4 behaviour. See
+.B VIEWING BLOCKED ATTEMPTS
+below.
 .PP
 The script is a POSIX-friendly
 .B /bin/sh
@@ -67,6 +90,41 @@ Write the generated blacklist to
 The target directory must be writable; non-root invocations are
 supported when the chosen path lies outside
 .IR /etc/modprobe.d/ .
+.TP
+.BR \-\-whitelist\-file " " \fIpath\fR
+Read site-local module names from
+.I path
+and append them to the in-script
+.B WHITELIST
+(additive). The file is in the format described under
+.B SITE-LOCAL WHITELIST FILE
+below: one module name per line, with
+.B #
+introducing a comment and blank lines ignored. Each non-comment line
+must match
+.B [a-zA-Z0-9_-]+
+exactly; malformed lines exit
+.B 65
+.RB ( EX_DATAERR )
+with a line-numbered stderr diagnostic. The file mode must not be
+group- or world-writable; if it is,
+.B modulejail
+exits
+.B 77
+.RB ( EX_NOPERM )
+and prints a
+.B chmod go-w
+hint. There is no default path; the operator picks where it lives.
+Available since v1.2.
+.TP
+.BR \-\-no\-syslog\-logging
+Force the v1.1.4-style
+.B "install <mod> /bin/true"
+install-line body, suppressing the default-on syslog emission added in
+v1.2. Use this on hosts without
+.IR /usr/bin/logger ,
+in minimal or initramfs builds, or when a byte-identical regression
+contract across versions is required. Available since v1.2.
 .TP
 .BR \-V ", " \-\-version
 Print version, repository URL, and license, then exit
@@ -101,6 +159,138 @@ banner. The
 .B ===
 anchors are designed for Ansible template insertion
 .RB ( lineinfile " or " blockinfile ).
+.PP
+Since v1.2, an external file is also supported via
+.BR \-\-whitelist\-file ;
+see
+.B SITE-LOCAL WHITELIST FILE
+below. The two mechanisms are additive: the in-script value remains the
+sysadmin's editable default, the file appends to it.
+
+.SH SITE-LOCAL WHITELIST FILE
+The
+.B \-\-whitelist\-file
+flag reads modules to keep from an operator-chosen file. This is the
+preferred path when modulejail is installed via
+.BR .deb / .rpm /
+.B "curl | sh"
+and editing the script in place would lose site-local additions on the
+next reinstall.
+.PP
+File format:
+.RS 4
+.EX
+# Comments start with # and run to end of line.
+# Blank lines are ignored.
+# Each non-comment line is one module name, matching [a-zA-Z0-9_-]+.
+# Trailing whitespace and CR (CRLF endings) are stripped silently.
+# Module names are accepted in both dash and underscore form;
+# the pipeline normalises - to _ internally.
+
+nft_compat
+xt_owner
+zfs
+.EE
+.RE
+.PP
+File mode must not be group-writable or world-writable (the same
+hardening that
+.BR sshd (8)
+applies to
+.I authorized_keys
+and that
+.BR sudo (8)
+applies to
+.IR sudoers ).
+.B modulejail
+calls
+.BR stat (1)
+with the GNU
+.B \-c '%a'
+form, falling back to the BSD
+.B \-f '%Lp'
+form for cross-distro portability; if either group- or world-write bits
+are set, it refuses to run with exit code
+.B 77
+.RB ( EX_NOPERM )
+and prints
+.B chmod go-w PATH
+as the remediation hint.
+
+.SH VIEWING BLOCKED ATTEMPTS
+Since v1.2, when
+.I /usr/bin/logger
+is executable on the host running
+.B modulejail
+and
+.B \-\-no\-syslog\-logging
+is not set, the generated install lines emit a syslog entry tagged
+.B modulejail
+each time a blocked module is targeted by
+.BR modprobe (8).
+View the entries via:
+.PP
+.RS
+.EX
+journalctl \-t modulejail \-\-since '1 hour ago'      # systemd / journald
+grep modulejail /var/log/syslog                       # classic syslog
+.EE
+.RE
+.PP
+The generated blacklist file's header annotation records which
+install-line form is in use:
+.PP
+.RS
+.EX
+# install-line: /bin/sh + logger (syslog tag: modulejail)
+# install-line: /bin/true (silent; --no-syslog-logging or logger absent)
+.EE
+.RE
+.PP
+If
+.I /usr/bin/logger
+is absent and
+.B \-\-no\-syslog\-logging
+was NOT set, modulejail silently falls back to the
+.B /bin/true
+form. No stderr warning is emitted; the header annotation is the only
+visible cue. Use
+.B \-\-no\-syslog\-logging
+explicitly when the v1.1.4 install-line body is a hard requirement.
+
+.SH SCOPE OF THE BLACKLIST
+A
+.BR modprobe.d (5)
+blacklist intercepts
+.BR modprobe (8)-mediated
+module loads: udev hotplug events, dependency resolution, autoloaded
+modules via the alias system. It does
+.B not
+intercept, by design:
+.TP
+.BR insmod (8)
+.B insmod
+bypasses
+.BR modprobe (8)
+entirely; it never reads
+.IR /etc/modprobe.d/ .
+A root user can always insert a
+.B .ko
+directly.
+.TP
+.B "modprobe --ignore-install"
+.BR modprobe (8)'s
+explicit escape hatch from install-line indirection. Treating it as
+suspicious is a higher-layer concern (auditd, eBPF) outside the
+.B modprobe.d
+contract.
+.PP
+.B modulejail
+is a default-safe policy on
+.BR modprobe (8).
+It removes the auto-loading attack surface that unprivileged code or
+remote attackers can reach, and it does not pretend to block a root
+user with intent.
 
 .SH SAFETY MODEL
 The invariant is: whatever is currently loaded is assumed necessary for
@@ -146,6 +336,12 @@ Success.
 Command-line argument error: bad flag, missing value, or unknown
 profile.
 .TP
+.B 65
+Invalid data in
+.B \-\-whitelist\-file
+.RI ( EX_DATAERR ):
+malformed module name on at least one non-comment, non-blank line.
+.TP
 .B 66
 Required kernel input missing
 .RI ( /proc/modules
@@ -183,6 +379,38 @@ release on GitHub. The check has a 10-second hard timeout and is silent
 on every failure mode; this variable disables it entirely for offline
 fleets, restricted networks, or pipeline-style automation where any
 unexpected output is noise.
+.TP
+.B MODULEJAIL_LOGGER_PATH
+Path to the
+.BR logger (1)
+binary used for the v1.2 syslog install-line detection (default:
+.IR /usr/bin/logger ).
+.B Test-only plumbing
+that lets acceptance tests exercise the absent-fallback path without a
+chroot or namespace; end-user operators leave this unset.
+.TP
+.B MODULEJAIL_MODULES_ROOT
+Root of the kernel modules tree to walk (default:
+.IR /lib/modules ).
+.B Test-only plumbing
+parallel to
+.B MODULEJAIL_PROC_MODULES
+and
+.BR MODULEJAIL_KVER ;
+lets host-local cases on non-Linux dev boxes point modulejail at a
+synthetic tree under
+.IR $TMPDIR .
+End-user operators leave this unset.
+.TP
+.B MODULEJAIL_PROC_MODULES
+Path to read the loaded-module list from (default:
+.IR /proc/modules ).
+.B Test-only plumbing.
+.TP
+.B MODULEJAIL_KVER
+Kernel version string used to locate the module tree (default:
+.BR uname \ -r ).
+.B Test-only plumbing.
 
 .SH FILES
 .TP
@@ -230,6 +458,41 @@ deterministic.
 .RS
 .EX
 MODULEJAIL_NO_UPDATE_CHECK=1 sudo modulejail
+.EE
+.RE
+.PP
+Site-local whitelist via an operator-owned file (preferred when
+modulejail is installed via package manager):
+.PP
+.RS
+.EX
+# /etc/modulejail/whitelist.conf — chmod 0644 (or stricter)
+#
+# nft_compat
+# xt_owner
+# zfs
+
+sudo modulejail \-\-whitelist\-file /etc/modulejail/whitelist.conf
+.EE
+.RE
+.PP
+View syslog entries for blocked module load attempts (since v1.2):
+.PP
+.RS
+.EX
+journalctl \-t modulejail \-\-since '1 hour ago'
+grep modulejail /var/log/syslog
+.EE
+.RE
+.PP
+Suppress syslog emission to restore the v1.1.4 install-line body
+byte-for-byte (useful on hosts without
+.BR logger ,
+or for byte-identical regression contracts):
+.PP
+.RS
+.EX
+sudo modulejail \-\-no\-syslog\-logging
 .EE
 .RE
 

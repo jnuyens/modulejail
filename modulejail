@@ -31,6 +31,8 @@ EX_NOPERM=77
 profile=conservative
 output=/etc/modprobe.d/modulejail-blacklist.conf
 WHITELIST_FILE=''
+NO_SYSLOG_LOGGING=''
+USE_LOGGER=''
 
 # --- Built-in baseline module lists (space-separated strings, not bash arrays) ---
 # Each profile inherits from the one above via variable interpolation (DRY).
@@ -85,6 +87,10 @@ usage() {
     printf '                    Append module names from PATH to the keep-set.\n'
     printf '                    One module per line; '\''#'\'' starts a comment.\n'
     printf '                    File must not be group- or world-writable.\n'
+    printf '  --no-syslog-logging\n'
+    printf '                    Force '\''/bin/true'\'' install lines (v1.1.4 behavior).\n'
+    printf '                    By default, when /usr/bin/logger is present, blocked\n'
+    printf '                    module loads are logged to syslog with tag '\''modulejail'\''.\n'
     printf '  -V, --version     Show program version and exit\n'
     printf '  -h, --help        Show this help text and exit\n'
     printf '\n'
@@ -110,6 +116,9 @@ usage() {
     printf 'Environment:\n'
     printf '  MODULEJAIL_NO_UPDATE_CHECK   Set to any non-empty value to skip the post-run\n'
     printf '                               check for a newer release on GitHub.\n'
+    printf '  MODULEJAIL_LOGGER_PATH       Path to the logger binary used for the syslog\n'
+    printf '                               install-line detection (default: /usr/bin/logger).\n'
+    printf '                               Test-only plumbing; end-user operators leave unset.\n'
 }
 
 # --- Argument parser (manual case loop — POSIX, supports long options) ---
@@ -143,6 +152,10 @@ while [ $# -gt 0 ]; do
             [ -n "$WHITELIST_FILE" ] || { printf 'modulejail: error: --whitelist-file= requires non-empty PATH\n' >&2; exit $EX_USAGE; }
             shift
             ;;
+        --no-syslog-logging)
+            NO_SYSLOG_LOGGING=1
+            shift
+            ;;
         -h|--help)
             usage
             exit $EX_OK
@@ -173,6 +186,21 @@ case "$profile" in
     minimal|conservative|desktop) ;;
     *) printf 'modulejail: error: unknown profile: %s (expected minimal, conservative, desktop)\n' "$profile" >&2; exit $EX_USAGE ;;
 esac
+
+# --- Logger detection (generation-time, per D-37) ---
+# The opt-out flag NO_SYSLOG_LOGGING wins. Otherwise, emit the logger
+# install-line iff the running host has an executable logger binary. Per
+# D-37 this is a one-shot check at generation time (not a per-modprobe
+# eval). The emitted install line itself uses `; exit 0` for
+# heterogeneous-fleet robustness (D-36).
+#
+# Path is overridable via MODULEJAIL_LOGGER_PATH for test fixtures
+# (test-only plumbing, cf. MODULEJAIL_PROC_MODULES / MODULEJAIL_KVER /
+# MODULEJAIL_MODULES_ROOT). End-user operators leave it unset; the
+# default is /usr/bin/logger.
+if [ -z "$NO_SYSLOG_LOGGING" ] && [ -x "${MODULEJAIL_LOGGER_PATH:-/usr/bin/logger}" ]; then
+    USE_LOGGER=1
+fi
 
 # --- Pre-flight: verify this is a Linux host with the required kernel ---
 # interfaces. Run this BEFORE the writability gate so non-Linux operators
@@ -415,6 +443,32 @@ parse_whitelist_file() {
     fi
 }
 
+# emit_install_line: read sorted module names from $1 (one per line) and
+# print one modprobe.d-format install line per module. Branches on
+# USE_LOGGER (set by the generation-time logger detection above).
+#
+# When USE_LOGGER is set: emit the D-36 form
+#   install <name> /bin/sh -c '/usr/bin/logger -t modulejail "blocked: <name>" 2>/dev/null; exit 0'
+# When USE_LOGGER is empty: emit the v1.1.4 form
+#   install <name> /bin/true
+#
+# awk-quoting note: the outer single-quotes around the awk program are
+# closed and reopened around each literal single-quote that has to land
+# in the install-line output ('"'"'"'"' is the canonical sh idiom). The
+# inner double-quotes around "blocked: %s" are part of the install-line
+# string sh will eval at modprobe time. printf's %s is interpolated at
+# generation time by awk, so the emitted line carries a literal module
+# name, not a $name reference.
+emit_install_line() {
+    if [ -n "$USE_LOGGER" ]; then
+        awk '{
+            printf "install %s /bin/sh -c '\''/usr/bin/logger -t modulejail \"blocked: %s\" 2>/dev/null; exit 0'\''\n", $1, $1
+        }' "$1"
+    else
+        awk '{print "install " $1 " /bin/true"}' "$1"
+    fi
+}
+
 list_baseline > "$workdir/baseline.txt"
 # parse_whitelist_file may exit non-zero (EX_NOINPUT / EX_NOPERM /
 # EX_DATAERR / EX_OSERR). POSIX /bin/sh has no `pipefail`, so the helper
@@ -493,18 +547,27 @@ tmp=$(mktemp "${target_dir}/.modulejail-blacklist.conf.XXXXXX") || {
     exit $EX_CANTCREAT
 }
 
-# Write 6-line header + one `install <mod> /bin/true` line per blacklisted module.
+# Write 7-line header + one install line per blacklisted module. The install
+# line takes one of two forms depending on the generation-time logger
+# detection (see USE_LOGGER above); emit_install_line picks the right form
+# and the header documents which one was chosen.
 # Header contains tool version + repo URL + profile + kernel + sha256 fingerprint +
-# edit-by-hand disclaimer. NO wall-clock; header is a deterministic function of
-# inputs. Fingerprint is computed above the render block.
+# install-line annotation + edit-by-hand disclaimer. NO wall-clock; header is
+# a deterministic function of inputs. Fingerprint is computed above the
+# render block.
 {
     printf '# modulejail %s\n' "$VERSION"
     printf '# https://github.com/jnuyens/modulejail\n'
     printf '# profile: %s\n' "$profile"
     printf '# kernel: %s\n' "$_kver"
     printf '# fingerprint: sha256:%s\n' "$fingerprint"
+    if [ -n "$USE_LOGGER" ]; then
+        printf '# install-line: /bin/sh + logger (syslog tag: modulejail)\n'
+    else
+        printf '# install-line: /bin/true (silent; --no-syslog-logging or logger absent)\n'
+    fi
     printf '# Do not edit by hand — regenerate with modulejail(8).\n'
-    awk '{print "install " $1 " /bin/true"}' "$blacklist"
+    emit_install_line "$blacklist"
 } > "$tmp"
 
 # Set world-readable permissions before rename (umask may be too restrictive;

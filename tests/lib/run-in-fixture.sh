@@ -55,10 +55,13 @@ printf '== [%s] (7) idempotency: two runs byte-identical ==\n' "$DISTRO"
 assert_cmp /tmp/fixture-run1.conf /tmp/fixture-run2.conf
 
 printf '== [%s] (8) output is syntactically valid modprobe.d ==\n' "$DISTRO"
-# Body lines must be either comments, install lines, or blank.
+# Body lines must be either comments, install lines, or blank. Two install-line
+# forms are valid as of Plan 03-02:
+#   v1.1.4 form:  install <name> /bin/true
+#   logger form:  install <name> /bin/sh -c '/usr/bin/logger -t modulejail "blocked: <name>" 2>/dev/null; exit 0'
 # grep exits 1 when count=0 (no non-matching lines found = all valid); suppress
 # that exit so set -e does not fire when the file is correct.
-bad=$(grep -Evc '^#|^install [a-zA-Z0-9_]+ /bin/true$|^$' /tmp/fixture-run1.conf || true)
+bad=$(grep -Evc '^#|^install [a-zA-Z0-9_]+ /bin/true$|^install [a-zA-Z0-9_]+ /bin/sh -c .*logger -t modulejail.*; exit 0.*$|^$' /tmp/fixture-run1.conf || true)
 assert_eq 0 "$bad" syntactic-validity
 
 printf '== [%s] (9) PORT-01: no per-distro branches in modulejail ==\n' "$DISTRO"

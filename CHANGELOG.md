@@ -5,6 +5,36 @@ All notable changes to ModuleJail are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.2] - 2026-05-18
+
+One-line follow-up to v1.2.1: when the host has neither `curl` nor
+`wget`, the best-effort update check now leaves an operator-visible
+breadcrumb instead of silently giving up.
+
+### Added
+
+- `check_for_updates` emits `modulejail: notice: no curl/wget in PATH,
+  cannot check for update` to stderr when neither downloader is
+  available on `$PATH`, then returns 0 (the function's documented
+  always-succeed contract is preserved). Severity-prefix matches the
+  other three `notice:` lines in the same function ("newer release
+  available" etc.). Authored by @pepa65 in [PR #1].
+
+### Notes
+
+- `check_for_updates` is best-effort (documented at the function's
+  block-comment header). Its exit code is independent of blacklist
+  generation; this release does not change any exit-code semantics for
+  the script's main job.
+- v1.1.4 byte-identical regression: 6363/6363 install lines preserved
+  (this patch does not touch the blacklist-rendering codepath).
+- Packaging metadata (`packaging/{deb,rpm}/`) and `man/modulejail.8.in`
+  pick up `1.2.2` via the existing `__VERSION__` substitution in
+  `packaging/build.sh`; the `.TH` line in the manpage stays at
+  `2026-05-18` (same calendar day as 1.2.0 / 1.2.1).
+
+[PR #1]: https://github.com/jnuyens/modulejail/pull/1
+
 ## [1.2.1] - 2026-05-18
 
 Bundled cleanup pass discharging four Phase 3 review WARNINGs, four

@@ -5,6 +5,42 @@ All notable changes to ModuleJail are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.3] - 2026-05-19
+
+### Added
+
+- New `-f` / `--fail-on-module-load` flag. When set, blocked module
+  loads return a non-zero exit code (`modprobe` fails loudly) instead
+  of silently succeeding with `/bin/true` / `exit 0`. Useful for
+  operators running CI or Ansible against `modprobe` who want
+  blacklisted-module attempts to surface as failures rather than
+  silent skips. Default behavior unchanged.
+- New install-line forms for the flag-on case:
+    - silent form: `install <name> /bin/false`
+    - logger form: `install <name> /bin/sh -c '/usr/bin/logger -t modulejail "blocked: <name>" 2>/dev/null; /bin/false'`
+- Two new acceptance cases:
+    - `tests/cases/fail-on-module-load-silent.sh`
+    - `tests/cases/fail-on-module-load-logger.sh`
+
+### Compatibility
+
+- The default-off install-line bytes are byte-identical to v1.2.2 in
+  both the silent and logger paths. The v1.1.4 byte-identical
+  regression contract (`tests/cases/v1.1.4-regression.sh`) still
+  passes (6363 / 6363 install lines).
+- New header annotations when the flag is set:
+    - `# install-line: /bin/false (silent, --fail-on-module-load)`
+    - `# install-line: /bin/sh + logger + /bin/false (syslog tag: modulejail, --fail-on-module-load)`
+  Default-off header strings unchanged.
+
+### Credit
+
+Proposed by @tjmnmk in [PR #4](https://github.com/jnuyens/modulejail/pull/4); applied directly with the following adjustments to fit the project's POSIX and byte-identical contracts:
+
+- `local install_final_cmd` (a bash/ksh extension; not POSIX) replaced with explicit branching in `emit_install_line`.
+- The default-off (`FAIL_ON_MODULE_LOAD=0`) logger path now preserves the trailing `; exit 0` byte-for-byte, instead of swapping to `; /bin/true`. The byte-identical contract for default behavior is intact.
+- Two new acceptance cases added under `tests/cases/`.
+
 ## [1.2.2] - 2026-05-18
 
 One-line follow-up to v1.2.1: when the host has neither `curl` nor

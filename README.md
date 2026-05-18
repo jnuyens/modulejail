@@ -38,7 +38,7 @@ unused modules, specific to your system.
 ## Quickstart
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.2.2/modulejail | sudo sh
+curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.2.3/modulejail | sudo sh
 ```
 
 > **WARNING: convenient, not safe.** This pipes unverified bytes from the
@@ -48,7 +48,7 @@ The script writes its blacklist to `/etc/modprobe.d/modulejail-blacklist.conf`
 by default. To use a different path:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.2.2/modulejail | sudo sh -s -- -o /etc/modprobe.d/site-blacklist.conf
+curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.2.3/modulejail | sudo sh -s -- -o /etc/modprobe.d/site-blacklist.conf
 ```
 
 ## The safer alternative
@@ -56,7 +56,7 @@ curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.2.2/modulejai
 Download, inspect, then run:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.2.2/modulejail -o /tmp/modulejail
+curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.2.3/modulejail -o /tmp/modulejail
 less /tmp/modulejail
 sudo sh /tmp/modulejail
 ```
@@ -71,12 +71,12 @@ to the GitHub release page:
 
 ```sh
 # Debian / Ubuntu:
-curl -fsSLO https://github.com/jnuyens/modulejail/releases/download/v1.2.2/modulejail_1.2.2_all.deb
-sudo dpkg -i modulejail_1.2.2_all.deb
+curl -fsSLO https://github.com/jnuyens/modulejail/releases/download/v1.2.3/modulejail_1.2.3_all.deb
+sudo dpkg -i modulejail_1.2.3_all.deb
 
 # RHEL / Fedora / Rocky:
-curl -fsSLO https://github.com/jnuyens/modulejail/releases/download/v1.2.2/modulejail-1.2.2-1.noarch.rpm
-sudo rpm -i modulejail-1.2.2-1.noarch.rpm
+curl -fsSLO https://github.com/jnuyens/modulejail/releases/download/v1.2.3/modulejail-1.2.3-1.noarch.rpm
+sudo rpm -i modulejail-1.2.3-1.noarch.rpm
 ```
 
 Both packages install `/usr/bin/modulejail`, the `modulejail(8)` manpage
@@ -136,17 +136,19 @@ it on a partial or in-flux system risks blacklisting a module that is
 occasionally needed.
 
 The generated file is placed under `/etc/modprobe.d/`. To revert, remove the
-file and reboot (see the Reverting section). The built-in baseline ensures
-that core filesystems, storage controllers, and essential networking modules
-are never blacklisted regardless of the running profile.
+file (no reboot needed — see the Reverting section). The built-in baseline
+ensures that core filesystems, storage controllers, and essential networking
+modules are never blacklisted regardless of the running profile.
 
 ## Explicit limitations
 
 - **No initramfs handling.** Modules baked into initramfs are out of scope.
   The loaded-module surface is the target; baked-in modules are not the
   relevant attack vector.
-- **No revert tooling.** The revert path is "remove the generated file and
-  reboot." Sysadmin discipline replaces tool guardrails.
+- **No revert tooling.** The revert path is "remove the generated file"
+  (no reboot needed; the blacklist is consulted by `modprobe` at load
+  time, so removing the file takes effect immediately). Sysadmin
+  discipline replaces tool guardrails.
 - **No daemon or continuous monitoring.** One-shot script by design.
 - **No AI inside the tool.** AI is the threat-model backdrop, not a feature.
 - **No per-distro packaging in v1.** The curl one-liner and a cloned repo
@@ -435,25 +437,31 @@ tree paths. End-user operators leave these unset.
 
 ## Reverting
 
-Remove the generated file under `/etc/modprobe.d/` and reboot, or `modprobe`
-the specific modules you need back without rebooting.
+Remove the generated file. The blacklist is consulted by `modprobe` at
+load time, not loaded into the kernel persistently, so removing the file
+takes effect immediately — no reboot needed.
 
 ```sh
-# Full revert (requires reboot):
+# Full revert (instant, no reboot needed):
 sudo rm /etc/modprobe.d/modulejail-blacklist.conf
-sudo reboot
 
-# Selective reload without reboot (bring back a specific module):
+# Selective: bring back a specific module right now, even while the
+# blacklist file is still in place (`modprobe` is the explicit-load
+# path that overrides the blacklist):
 sudo modprobe <module_name>
 ```
 
 The generated file uses `install <module> ...` directives (with either a
 `/bin/sh + logger` body or `/bin/true`, see *Viewing blocked module
-attempts* above), which block autoloading. Explicitly loading with
-`modprobe` overrides the blacklist for the current boot session only;
-the restriction re-applies after the next reboot unless the file has
-been removed. See *Scope of the blacklist* above for the precise list of
-what `modprobe.d` install directives do and do not intercept.
+attempts* above), which block autoloading via udev events and dependency
+resolution. Explicit `sudo modprobe <name>` invocations override the
+blacklist immediately, regardless of whether the file is still present.
+If the file is still in place, the override applies only to that single
+explicit load — subsequent autoload attempts (from udev or other modules
+requiring the named module as a dependency) will be blocked again. To
+make the unblock permanent, remove the blacklist file. See *Scope of the
+blacklist* above for the precise list of what `modprobe.d` install
+directives do and do not intercept.
 
 ## Contributing
 

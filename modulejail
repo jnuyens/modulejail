@@ -15,7 +15,7 @@ export LC_ALL
 # --- Tool version + sysexits.h exit code constants ---
 # VERSION is the single source of truth for both --version and the
 # generated blacklist header. Bump on every release per SemVer.
-VERSION='1.2.2'
+VERSION='1.2.3'
 EX_OK=0
 # sysexits.h conventional codes (see man 3 sysexits):
 #   64=usage 65=dataerr 66=noinput 70=software 71=oserr 73=cantcreat 77=noperm
@@ -34,6 +34,7 @@ WHITELIST_FILE=''
 NO_WHITELIST_FILE=''
 NO_SYSLOG_LOGGING=''
 USE_LOGGER=''
+FAIL_ON_MODULE_LOAD=0
 
 # Path checked for a site-local whitelist when --whitelist-file is not given.
 # When the file exists, it is loaded automatically with the same strict
@@ -107,6 +108,10 @@ usage() {
     printf '                    Force '\''/bin/true'\'' install lines (v1.1.4 behavior).\n'
     printf '                    By default, when /usr/bin/logger is present, blocked\n'
     printf '                    module loads are logged to syslog with tag '\''modulejail'\''.\n'
+    printf '  -f, --fail-on-module-load\n'
+    printf '                    Blocked module loads return a non-zero exit code\n'
+    printf '                    (modprobe fails loudly). Default: blocked loads\n'
+    printf '                    silently succeed (modprobe returns 0).\n'
     printf '  -V, --version     Show program version and exit\n'
     printf '  -h, --help        Show this help text and exit\n'
     printf '\n'
@@ -179,6 +184,10 @@ while [ $# -gt 0 ]; do
             ;;
         --no-syslog-logging)
             NO_SYSLOG_LOGGING=1
+            shift
+            ;;
+        -f|--fail-on-module-load)
+            FAIL_ON_MODULE_LOAD=1
             shift
             ;;
         -h|--help)
@@ -558,6 +567,10 @@ parse_whitelist_file() {
 #   install <name> /bin/sh -c '/usr/bin/logger -t modulejail "blocked: <name>" 2>/dev/null; exit 0'
 # When USE_LOGGER is empty: emit the v1.1.4 form
 #   install <name> /bin/true
+# When FAIL_ON_MODULE_LOAD is set, the trailing `exit 0` becomes `/bin/false`
+# and the bare `/bin/true` becomes `/bin/false`, so modprobe returns
+# non-zero for blacklisted modules. The default-off (`FAIL_ON_MODULE_LOAD=0`)
+# install-line bytes are unchanged from v1.2.2 by construction.
 #
 # awk-quoting note: the outer single-quotes around the awk program are
 # closed and reopened around each literal single-quote that has to land
@@ -568,11 +581,26 @@ parse_whitelist_file() {
 # name, not a $name reference.
 emit_install_line() {
     if [ -n "$USE_LOGGER" ]; then
-        awk '{
-            printf "install %s /bin/sh -c '\''/usr/bin/logger -t modulejail \"blocked: %s\" 2>/dev/null; exit 0'\''\n", $1, $1
-        }' "$1"
+        if [ "$FAIL_ON_MODULE_LOAD" -eq 0 ]; then
+            # Default: byte-identical to v1.2.2 (trailing `; exit 0`).
+            awk '{
+                printf "install %s /bin/sh -c '\''/usr/bin/logger -t modulejail \"blocked: %s\" 2>/dev/null; exit 0'\''\n", $1, $1
+            }' "$1"
+        else
+            # Fail mode: `; /bin/false` instead of `; exit 0`, so the
+            # whole install command returns non-zero and modprobe fails.
+            awk '{
+                printf "install %s /bin/sh -c '\''/usr/bin/logger -t modulejail \"blocked: %s\" 2>/dev/null; /bin/false'\''\n", $1, $1
+            }' "$1"
+        fi
     else
-        awk '{print "install " $1 " /bin/true"}' "$1"
+        if [ "$FAIL_ON_MODULE_LOAD" -eq 0 ]; then
+            # Default: byte-identical to v1.1.4 / v1.2.2 silent form.
+            awk '{print "install " $1 " /bin/true"}' "$1"
+        else
+            # Fail mode: /bin/false makes modprobe fail loudly.
+            awk '{print "install " $1 " /bin/false"}' "$1"
+        fi
     fi
 }
 
@@ -675,9 +703,17 @@ tmp=$(mktemp "${target_dir}/.modulejail-blacklist.conf.XXXXXX") || {
     printf '# kernel: %s\n' "$_kver"
     printf '# fingerprint: sha256:%s\n' "$fingerprint"
     if [ -n "$USE_LOGGER" ]; then
-        printf '# install-line: /bin/sh + logger (syslog tag: modulejail)\n'
+        if [ "$FAIL_ON_MODULE_LOAD" -eq 0 ]; then
+            printf '# install-line: /bin/sh + logger (syslog tag: modulejail)\n'
+        else
+            printf '# install-line: /bin/sh + logger + /bin/false (syslog tag: modulejail, --fail-on-module-load)\n'
+        fi
     else
-        printf '# install-line: /bin/true (silent, --no-syslog-logging or logger absent)\n'
+        if [ "$FAIL_ON_MODULE_LOAD" -eq 0 ]; then
+            printf '# install-line: /bin/true (silent, --no-syslog-logging or logger absent)\n'
+        else
+            printf '# install-line: /bin/false (silent, --fail-on-module-load)\n'
+        fi
     fi
     printf '# Do not edit by hand — regenerate with modulejail(8).\n'
     emit_install_line "$blacklist"

@@ -433,7 +433,14 @@ list_whitelist() {
 # Side effects: errors to stderr and exits non-zero on any rejection.
 # Exit codes:
 #   65 (EX_DATAERR) - malformed module name on any non-comment line
+#                     (awk's `END { if (!ok) exit 65 }` data-error path)
 #   66 (EX_NOINPUT) - file does not exist or is unreadable
+#   71 (EX_OSERR)   - awk failed for a non-data reason (OOM, signal, future
+#                     program-edit syntax error); distinguished from EX_DATAERR
+#                     so fleet automation that case-splits on sysexits codes
+#                     reads correctly. (WR-01 fix: previously this branch was
+#                     dead code under set -eu because awk's non-zero exit
+#                     aborted the shell at the awk line before we could remap.)
 #   77 (EX_NOPERM)  - file is group- or world-writable
 parse_whitelist_file() {
     _wf="$1"
@@ -466,6 +473,18 @@ parse_whitelist_file() {
     esac
     # Parse the file. Use awk for line-numbered validation - we want the
     # line number in error messages so operators can find the bad entry.
+    #
+    # WR-01: bracket the awk invocation with `set +e` / `set -e` so we can
+    # capture the real return code and route it to a typed sysexits exit.
+    # Without this, `set -eu` at line 5 aborts the shell at the awk line on
+    # any non-zero awk exit, making the dispatch below dead code (the bug
+    # found in the Phase-3 review). Inside the awk program, the only
+    # documented non-zero exit is `END { if (!ok) exit 65 }`, which maps
+    # to EX_DATAERR (65). Any other non-zero exit indicates an awk-internal
+    # failure (OOM, killed by signal, future program-edit syntax error),
+    # routed to EX_OSERR (71). Two distinct codes; fleet automation case-
+    # splitting on `$?` reads correctly.
+    set +e
     awk -v file="$_wf" '
         BEGIN { ok = 1 }
         # Strip CR (handle CRLF line endings gracefully).
@@ -486,9 +505,14 @@ parse_whitelist_file() {
         END { if (!ok) exit 65 }
     ' "$_wf"
     _awk_status=$?
-    if [ "$_awk_status" -ne 0 ]; then
-        exit $EX_DATAERR
-    fi
+    set -e
+    case "$_awk_status" in
+        0)   ;;                       # clean parse
+        65)  exit $EX_DATAERR ;;      # documented data-error path
+        *)   printf 'modulejail: error: awk failed parsing whitelist file %s (rc=%d)\n' \
+                 "$_wf" "$_awk_status" >&2
+             exit $EX_OSERR ;;
+    esac
 }
 
 # emit_install_line: read sorted module names from $1 (one per line) and

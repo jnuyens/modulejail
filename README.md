@@ -38,7 +38,7 @@ unused modules, specific to your system.
 ## Quickstart
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.2.0/modulejail | sudo sh
+curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.2.2/modulejail | sudo sh
 ```
 
 > **WARNING: convenient, not safe.** This pipes unverified bytes from the
@@ -48,7 +48,7 @@ The script writes its blacklist to `/etc/modprobe.d/modulejail-blacklist.conf`
 by default. To use a different path:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.2.0/modulejail | sudo sh -s -- -o /etc/modprobe.d/site-blacklist.conf
+curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.2.2/modulejail | sudo sh -s -- -o /etc/modprobe.d/site-blacklist.conf
 ```
 
 ## The safer alternative
@@ -56,7 +56,7 @@ curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.2.0/modulejai
 Download, inspect, then run:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.2.0/modulejail -o /tmp/modulejail
+curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.2.2/modulejail -o /tmp/modulejail
 less /tmp/modulejail
 sudo sh /tmp/modulejail
 ```
@@ -71,12 +71,12 @@ to the GitHub release page:
 
 ```sh
 # Debian / Ubuntu:
-curl -fsSLO https://github.com/jnuyens/modulejail/releases/download/v1.2.0/modulejail_1.2.0_all.deb
-sudo dpkg -i modulejail_1.2.0_all.deb
+curl -fsSLO https://github.com/jnuyens/modulejail/releases/download/v1.2.2/modulejail_1.2.2_all.deb
+sudo dpkg -i modulejail_1.2.2_all.deb
 
 # RHEL / Fedora / Rocky:
-curl -fsSLO https://github.com/jnuyens/modulejail/releases/download/v1.2.0/modulejail-1.2.0-1.noarch.rpm
-sudo rpm -i modulejail-1.2.0-1.noarch.rpm
+curl -fsSLO https://github.com/jnuyens/modulejail/releases/download/v1.2.2/modulejail-1.2.2-1.noarch.rpm
+sudo rpm -i modulejail-1.2.2-1.noarch.rpm
 ```
 
 Both packages install `/usr/bin/modulejail`, the `modulejail(8)` manpage

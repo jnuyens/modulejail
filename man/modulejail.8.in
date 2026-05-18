@@ -274,7 +274,7 @@ install-line form is in use:
 .RS
 .EX
 # install-line: /bin/sh + logger (syslog tag: modulejail)
-# install-line: /bin/true (silent; --no-syslog-logging or logger absent)
+# install-line: /bin/true (silent, --no-syslog-logging or logger absent)
 .EE
 .RE
 .PP

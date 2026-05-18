@@ -313,7 +313,7 @@ sudo modulejail --no-syslog-logging
 The header annotation then reads:
 
 ```
-# install-line: /bin/true (silent; --no-syslog-logging or logger absent)
+# install-line: /bin/true (silent, --no-syslog-logging or logger absent)
 ```
 
 If `/usr/bin/logger` is absent on the host AND `--no-syslog-logging`

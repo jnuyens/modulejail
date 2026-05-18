@@ -23,7 +23,7 @@ OUT=$CASE_TMP/out.conf
     case_fail "modulejail --no-syslog-logging exited $? (expected 0); stderr=$(cat "$CASE_TMP/stderr")"
 
 # Header annotation MUST be the /bin/true form.
-assert_grep '^# install-line: /bin/true \(silent; --no-syslog-logging or logger absent\)$' \
+assert_grep '^# install-line: /bin/true \(silent, --no-syslog-logging or logger absent\)$' \
     "$OUT" header-true-annotation
 
 # Header annotation MUST NOT be the logger form.

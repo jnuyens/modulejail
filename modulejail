@@ -452,6 +452,11 @@ list_whitelist() {
 # parse_whitelist_file: validate and parse the optional --whitelist-file.
 # Stdin: none. Stdout: zero or more module names, one per line (unsorted).
 # Side effects: errors to stderr and exits non-zero on any rejection.
+# Tolerates leading and trailing whitespace per line (IN-02): the awk
+# program strips both before validating against the canonical regex, so
+# an indented entry copy-pasted from a YAML or other indented source
+# parses cleanly rather than tripping EX_DATAERR. Blank lines and lines
+# whose first non-blank char is `#` are skipped.
 # Exit codes:
 #   65 (EX_DATAERR) - malformed module name on any non-comment line
 #                     (awk's `END { if (!ok) exit 65 }` data-error path)
@@ -512,6 +517,14 @@ parse_whitelist_file() {
         { sub(/\r$/, "") }
         # Strip trailing whitespace.
         { sub(/[[:space:]]+$/, "") }
+        # IN-02: strip leading whitespace symmetric with the trailing
+        # strip above, so a naturally-indented module name (e.g.
+        # "  vfio_pci" copy-pasted from a YAML or other indented
+        # source) is accepted rather than rejected as EX_DATAERR.
+        # Blank-line and comment-line skips below already tolerated
+        # leading whitespace via their own ^[[:space:]]* patterns; this
+        # extends that tolerance to module-name lines for symmetry.
+        { sub(/^[[:space:]]+/, "") }
         # Skip blank lines.
         /^[[:space:]]*$/ { next }
         # Skip comment lines.
@@ -663,7 +676,7 @@ tmp=$(mktemp "${target_dir}/.modulejail-blacklist.conf.XXXXXX") || {
     if [ -n "$USE_LOGGER" ]; then
         printf '# install-line: /bin/sh + logger (syslog tag: modulejail)\n'
     else
-        printf '# install-line: /bin/true (silent; --no-syslog-logging or logger absent)\n'
+        printf '# install-line: /bin/true (silent, --no-syslog-logging or logger absent)\n'
     fi
     printf '# Do not edit by hand — regenerate with modulejail(8).\n'
     emit_install_line "$blacklist"

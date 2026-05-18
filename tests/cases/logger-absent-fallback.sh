@@ -42,7 +42,7 @@ assert_cmp "$OUT_ABSENT" "$OUT_OPTOUT"
 
 # Header annotation MUST be the /bin/true form (defence in depth - cmp
 # already proves it, but this asserts the form explicitly).
-assert_grep '^# install-line: /bin/true \(silent; --no-syslog-logging or logger absent\)$' \
+assert_grep '^# install-line: /bin/true \(silent, --no-syslog-logging or logger absent\)$' \
     "$OUT_ABSENT" header-true-annotation-on-absent-fallback
 
 # D-40 explicitly says NO stderr warning when logger is absent and the

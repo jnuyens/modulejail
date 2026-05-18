@@ -56,7 +56,11 @@ if [ -z "$EXPECTED_VERSION" ]; then
     exit 1
 fi
 
-HOSTS='ubuntu-wifi debian13 rocky9'
+# HOSTS is overridable via the environment so the WR-02 regression test
+# (tests/cases/ssh-unreachable-regression.sh) can drive the harness against
+# a guaranteed-unreachable name without editing this file. End-user
+# operators leave it unset; the default is the three real-kernel hosts.
+HOSTS="${HOSTS:-ubuntu-wifi debian13 rocky9}"
 OVERALL_FAIL=0
 SUMMARY=
 
@@ -160,16 +164,23 @@ run_host() {
 }
 
 UNREACHED=0
+# WR-02 / CR-01-v1.0.0 fix: bracket the run_host call with set +e / set -e
+# and capture rc=$? directly from a bare call. The previous
+# `if ! run_host ...; then rc=$?` shape captured the inverted-condition
+# `!` exit (always 0 inside the `then` branch under POSIX /bin/sh, dash,
+# and bash), so an unreachable host (run_host returns 2) was mis-classified
+# as OVERALL_FAIL instead of UNREACHED and the harness exited 1 instead of
+# the documented 2.
 for host in $HOSTS; do
-    label="real-kernel acceptance"
-    if ! run_host "$host" "$label"; then
-        rc=$?
-        if [ "$rc" -eq 2 ]; then
-            UNREACHED=$((UNREACHED+1))
-        else
-            OVERALL_FAIL=$((OVERALL_FAIL+1))
-        fi
-    fi
+    set +e
+    run_host "$host" "real-kernel acceptance"
+    rc=$?
+    set -e
+    case "$rc" in
+        0) ;;
+        2) UNREACHED=$((UNREACHED+1)) ;;
+        *) OVERALL_FAIL=$((OVERALL_FAIL+1)) ;;
+    esac
 done
 
 printf '\n========== SUMMARY ==========\n'

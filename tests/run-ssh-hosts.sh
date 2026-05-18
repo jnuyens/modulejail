@@ -7,23 +7,23 @@
 # rocky9 (Rocky Linux 9.7, RHEL family).
 #
 # Each host gets:
-#   1. /etc/os-release capture (evidence pin — RESEARCH A5; rocky9 confirmation)
+#   1. /etc/os-release capture (evidence pin; rocky9 confirmation)
 #   2. modulejail copied over to /tmp/mj-test
 #   3. --version exit-0 check
 #   4. Bad-flag → EX_USAGE=64 check
 #   5. Directory-as-output → EX_CANTCREAT=73 check
 #   6. Successful run with -o /tmp/mj-host-run1.conf (non-root, write-to-/tmp;
-#      Phase 1 methodology preserved — no risk to host /etc/modprobe.d/)
+#      original methodology preserved — no risk to host /etc/modprobe.d/)
 #   7. Idempotency: second run → cmp byte-identical
 #   8. Success-line shape regex check on the run-6 stdout
 #   9. Generated file header shape: line 1 = "# modulejail <VERSION>"
 #      (VERSION auto-derived from the modulejail script under test, so
 #      the assertion survives future SemVer bumps without edits),
 #      line 5 = "# fingerprint: sha256:<64 hex>"
-#  10. PORT-01 grep assertion (no per-distro branches in the script that
+#  10. Portability grep assertion (no per-distro branches in the script that
 #      was just copied over)
 #
-# Special handling for rocky9 (RESEARCH §Pitfall 4): SELinux on RHEL family
+# Special handling for rocky9: SELinux on RHEL family
 # may deny non-root reads in parts of /lib/modules/<ver>/, which legitimately
 # trips EX_OSERR=71 ("find reported errors"). If we observe rc=71 on rocky9,
 # the harness records it as a documented expected behavior (not a regression)
@@ -56,7 +56,7 @@ if [ -z "$EXPECTED_VERSION" ]; then
     exit 1
 fi
 
-# HOSTS is overridable via the environment so the WR-02 regression test
+# HOSTS is overridable via the environment so the unreachable-host regression test
 # (tests/cases/ssh-unreachable-regression.sh) can drive the harness against
 # a guaranteed-unreachable name without editing this file. End-user
 # operators leave it unset; the default is the three real-kernel hosts.
@@ -109,12 +109,12 @@ run_host() {
     set -e
 
     # rocky9-specific: SELinux on /lib/modules can legitimately surface
-    # EX_OSERR=71 under non-root (RESEARCH §Pitfall 4). Document and skip
-    # the remaining real-kernel-walk-dependent assertions.
+    # EX_OSERR=71 under non-root. Document and skip the remaining
+    # real-kernel-walk-dependent assertions.
     if [ "$rc" -eq 71 ] && [ "$host" = "rocky9" ]; then
         printf '[%s] OBSERVED: EX_OSERR=71 (SELinux likely deny on non-root /lib/modules read)\n' "$host"
-        printf '       (See RESEARCH §Pitfall 4. This is documented expected behavior\n'
-        printf '        for rocky9 non-root smoke runs. README should note this.)\n'
+        printf '       (This is documented expected behavior for rocky9 non-root\n'
+        printf '        smoke runs. README should note this.)\n'
         SUMMARY="${SUMMARY}[$host] PASS (with documented EX_OSERR=71 on non-root SELinux deny)\n"
         return 0
     fi
@@ -150,21 +150,21 @@ run_host() {
     fp=$(printf '%s\n' "$line5" | awk '{print $3}')
     printf '[%s] fingerprint: %s\n' "$host" "$fp"
 
-    # 10. PORT-01 grep assertion on the script that was copied over.
-    printf '\n-- [%s] (10) PORT-01: no per-distro branches --\n' "$host"
+    # 10. Portability grep assertion on the script that was copied over.
+    printf '\n-- [%s] (10) no per-distro branches --\n' "$host"
     set +e
     ssh "$host" "grep -nE '/etc/os-release|/etc/lsb-release|/etc/redhat-release|/etc/debian_version|ID_LIKE|ID=ubuntu|ID=debian|ID=rhel|ID=fedora|ID=arch|ID=alpine|ID=opensuse' /tmp/mj-test"
     grc=$?
     set -e
     # grep returns 1 when there are NO matches — exactly what we want.
-    [ "$grc" -eq 1 ] || { printf '[%s] FAIL: PORT-01 grep found matches (grep rc=%d)\n' "$host" "$grc" >&2; return 1; }
+    [ "$grc" -eq 1 ] || { printf '[%s] FAIL: per-distro grep found matches (grep rc=%d)\n' "$host" "$grc" >&2; return 1; }
 
     SUMMARY="${SUMMARY}[$host] PASS (fingerprint: $fp)\n"
     printf '[%s] HOST PASS\n' "$host"
 }
 
 UNREACHED=0
-# WR-02 / CR-01-v1.0.0 fix: bracket the run_host call with set +e / set -e
+# Bracket the run_host call with set +e / set -e
 # and capture rc=$? directly from a bare call. The previous
 # `if ! run_host ...; then rc=$?` shape captured the inverted-condition
 # `!` exit (always 0 inside the `then` branch under POSIX /bin/sh, dash,

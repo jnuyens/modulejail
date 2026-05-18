@@ -1,5 +1,5 @@
 #!/bin/sh
-# Case: v1.1.4 byte-identical regression contract (D-39).
+# Case: v1.1.4 byte-identical regression contract.
 #
 # Asserts that modulejail v1.2 with --no-syslog-logging, run against the
 # archived v1.1.4-era canned inputs (proc-modules + modules-list + pinned
@@ -13,7 +13,7 @@
 #                                  the fingerprint IS identical, but if a
 #                                  future version touches the fingerprint
 #                                  inputs the body-diff stays clean
-#   # install-line: ...          - new in v1.2 (D-38), absent in v1.1.4
+#   # install-line: ...          - new in v1.2, absent in v1.1.4
 # All other lines (kernel, profile, disclaimer, every install line) MUST
 # match exactly.
 #
@@ -85,7 +85,7 @@ awk '{
 (cd "$TREE_ROOT" && xargs touch < "$CASE_TMP/manifest")
 
 # Generate the v1.2 candidate output with --no-syslog-logging set so the
-# install-line body matches the v1.1.4 form (D-39 contract).
+# install-line body matches the v1.1.4 form (byte-identical contract).
 ACTUAL=$CASE_TMP/actual.conf
 MODULEJAIL_MODULES_ROOT=$CASE_TMP/lib/modules \
 MODULEJAIL_KVER=$KVER \

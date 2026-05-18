@@ -1,7 +1,7 @@
 #!/bin/sh
 # Case: when /usr/bin/logger is not executable on the host AND
 # --no-syslog-logging is not set, modulejail silently falls back to the
-# v1.1.4 /bin/true install-line form (D-40). The output MUST be byte-
+# v1.1.4 /bin/true install-line form. The output MUST be byte-
 # identical to a run with --no-syslog-logging on the same inputs.
 #
 # Simulates "logger absent" via the MODULEJAIL_LOGGER_PATH env-var override
@@ -34,7 +34,7 @@ MODULEJAIL_LOGGER_PATH=/nonexistent \
 "$MODULEJAIL_BIN" --no-syslog-logging -o "$OUT_OPTOUT" > "$CASE_TMP/stdout-optout" 2> "$CASE_TMP/stderr-optout" || \
     case_fail "modulejail --no-syslog-logging exited $? (expected 0); stderr=$(cat "$CASE_TMP/stderr-optout")"
 
-# D-40: the silent-fallback path MUST produce byte-identical output to the
+# The silent-fallback path MUST produce byte-identical output to the
 # explicit opt-out path. This is the strict invariant: same header (same
 # fingerprint, same /bin/true install-line annotation), same body, same
 # trailing newline. cmp catches any drift.
@@ -45,10 +45,10 @@ assert_cmp "$OUT_ABSENT" "$OUT_OPTOUT"
 assert_grep '^# install-line: /bin/true \(silent, --no-syslog-logging or logger absent\)$' \
     "$OUT_ABSENT" header-true-annotation-on-absent-fallback
 
-# D-40 explicitly says NO stderr warning when logger is absent and the
+# Spec explicitly says NO stderr warning when logger is absent and the
 # operator did not pass --no-syslog-logging. Stderr must be empty.
 if [ -s "$CASE_TMP/stderr-absent" ]; then
-    case_fail "logger-absent path produced stderr output; D-40 says silent fallback: $(cat "$CASE_TMP/stderr-absent")"
+    case_fail "logger-absent path produced stderr output; spec says silent fallback: $(cat "$CASE_TMP/stderr-absent")"
 fi
 
 # No logger reference in either body (sanity).

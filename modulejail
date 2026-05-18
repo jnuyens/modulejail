@@ -235,12 +235,13 @@ if [ -z "$WHITELIST_FILE" ] && [ -z "$NO_WHITELIST_FILE" ] && [ -e "$DEFAULT_WHI
     printf 'modulejail: info: using default whitelist file %s (--no-whitelist-file to opt out)\n' "$DEFAULT_WHITELIST_FILE" >&2
 fi
 
-# --- Logger detection (generation-time, per D-37) ---
+# --- Logger detection (generation-time, one-shot per run) ---
 # The opt-out flag NO_SYSLOG_LOGGING wins. Otherwise, emit the logger
-# install-line iff the running host has an executable logger binary. Per
-# D-37 this is a one-shot check at generation time (not a per-modprobe
+# install-line iff the running host has an executable logger binary.
+# This is a one-shot check at generation time (not a per-modprobe
 # eval). The emitted install line itself uses `; exit 0` for
-# heterogeneous-fleet robustness (D-36).
+# heterogeneous-fleet robustness (so a missing logger at modprobe
+# time still returns 0).
 #
 # Path is overridable via MODULEJAIL_LOGGER_PATH for test fixtures
 # (test-only plumbing, cf. MODULEJAIL_PROC_MODULES / MODULEJAIL_KVER /
@@ -380,7 +381,7 @@ list_universe() {
             !sub(/\.ko$/, "", n)) next
         # Normalize - to _ (canonical underscore form)
         gsub(/-/, "_", n)
-        # WR-03 (Phase 3) defense-in-depth: reject names containing
+        # Defense-in-depth: reject names containing
         # anything outside canonical kernel-module characters before
         # they can land in /etc/modprobe.d/ install lines. The strict
         # regex gate is what the project documentation positions as
@@ -403,7 +404,7 @@ list_loaded() {
     # /proc/modules path overridable via MODULEJAIL_PROC_MODULES
     # (test-only plumbing; see pre-flight gate above).
     #
-    # WR-03 (Phase 3) defense-in-depth: apply the same canonical-name
+    # Defense-in-depth: apply the same canonical-name
     # filter as list_universe for symmetry. Column 1 of /proc/modules
     # is kernel-owned and trustworthy in practice, but the strict-regex
     # gate that the project documentation positions as the guarantee
@@ -452,7 +453,7 @@ list_whitelist() {
 # parse_whitelist_file: validate and parse the optional --whitelist-file.
 # Stdin: none. Stdout: zero or more module names, one per line (unsorted).
 # Side effects: errors to stderr and exits non-zero on any rejection.
-# Tolerates leading and trailing whitespace per line (IN-02): the awk
+# Tolerates leading and trailing whitespace per line: the awk
 # program strips both before validating against the canonical regex, so
 # an indented entry copy-pasted from a YAML or other indented source
 # parses cleanly rather than tripping EX_DATAERR. Blank lines and lines
@@ -464,8 +465,8 @@ list_whitelist() {
 #   71 (EX_OSERR)   - awk failed for a non-data reason (OOM, signal, future
 #                     program-edit syntax error); distinguished from EX_DATAERR
 #                     so fleet automation that case-splits on sysexits codes
-#                     reads correctly. (WR-01 fix: previously this branch was
-#                     dead code under set -eu because awk's non-zero exit
+#                     reads correctly. (Previously this branch was dead
+#                     code under set -eu because awk's non-zero exit
 #                     aborted the shell at the awk line before we could remap.)
 #   77 (EX_NOPERM)  - file is group- or world-writable
 parse_whitelist_file() {
@@ -500,11 +501,11 @@ parse_whitelist_file() {
     # Parse the file. Use awk for line-numbered validation - we want the
     # line number in error messages so operators can find the bad entry.
     #
-    # WR-01: bracket the awk invocation with `set +e` / `set -e` so we can
+    # Bracket the awk invocation with `set +e` / `set -e` so we can
     # capture the real return code and route it to a typed sysexits exit.
     # Without this, `set -eu` at line 5 aborts the shell at the awk line on
-    # any non-zero awk exit, making the dispatch below dead code (the bug
-    # found in the Phase-3 review). Inside the awk program, the only
+    # any non-zero awk exit, making the dispatch below dead code. Inside
+    # the awk program, the only
     # documented non-zero exit is `END { if (!ok) exit 65 }`, which maps
     # to EX_DATAERR (65). Any other non-zero exit indicates an awk-internal
     # failure (OOM, killed by signal, future program-edit syntax error),
@@ -517,7 +518,7 @@ parse_whitelist_file() {
         { sub(/\r$/, "") }
         # Strip trailing whitespace.
         { sub(/[[:space:]]+$/, "") }
-        # IN-02: strip leading whitespace symmetric with the trailing
+        # Strip leading whitespace symmetric with the trailing
         # strip above, so a naturally-indented module name (e.g.
         # "  vfio_pci" copy-pasted from a YAML or other indented
         # source) is accepted rather than rejected as EX_DATAERR.
@@ -553,7 +554,7 @@ parse_whitelist_file() {
 # print one modprobe.d-format install line per module. Branches on
 # USE_LOGGER (set by the generation-time logger detection above).
 #
-# When USE_LOGGER is set: emit the D-36 form
+# When USE_LOGGER is set: emit the logger form
 #   install <name> /bin/sh -c '/usr/bin/logger -t modulejail "blocked: <name>" 2>/dev/null; exit 0'
 # When USE_LOGGER is empty: emit the v1.1.4 form
 #   install <name> /bin/true

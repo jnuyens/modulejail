@@ -1,7 +1,7 @@
 #!/bin/sh
 # tests/run-fixtures.sh — modulejail test harness (host-local + containers).
 #
-# Invocation contract (WR-05, Phase 4):
+# Invocation contract:
 #
 #   tests/run-fixtures.sh
 #       Default mode. Discovers and runs every host-local case under
@@ -24,7 +24,7 @@
 #       /TAP skip convention if a future operator runs against an empty
 #       tests/cases/).
 #
-# Pre-Phase-4 behaviour: the no-container-runtime path exited 77 without
+# Pre-fix behaviour: the no-container-runtime path exited 77 without
 # running anything, so the 13+ new host-local cases under tests/cases/
 # (whitelist-file-*, logger-*, v1.1.4-regression, ssh-unreachable-
 # regression, emit-install-line-sanitize) were silently skipped on every

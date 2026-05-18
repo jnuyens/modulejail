@@ -1,12 +1,12 @@
 #!/bin/sh
-# Case: WR-02 / CR-01-v1.0.0 regression — SSH-host harness exit-code routing.
+# Case: regression — SSH-host harness exit-code routing.
 #
 # Drives tests/run-ssh-hosts.sh against a guaranteed-unreachable host
 # (the RFC 2606 `.invalid` TLD, which DNS resolvers MUST reject) and
 # asserts the harness exits 2 ("unable to reach one or more hosts"),
 # NOT exit 1 ("at least one host failed").
 #
-# Pre-T-02 the harness's host loop used:
+# Pre-fix, the harness's host loop used:
 #     if ! run_host "$host" "$label"; then
 #         rc=$?
 #         if [ "$rc" -eq 2 ]; then UNREACHED=$((UNREACHED+1))
@@ -16,7 +16,7 @@
 # Under POSIX /bin/sh, dash, and bash the `$?` inside `if ! cmd; then`
 # is always 0 (the inverted-condition `!` consumes the inner return
 # code), so the rc=2 branch was dead and the harness misreported
-# every unreachable host as OVERALL_FAIL. The T-02 fix:
+# every unreachable host as OVERALL_FAIL. The fix:
 #     set +e
 #     run_host "$host" "real-kernel acceptance"
 #     rc=$?
@@ -33,7 +33,7 @@
 #     git log -1 --pretty=%H tests/run-ssh-hosts.sh   # remember the SHA
 #     git stash push -- tests/run-ssh-hosts.sh         # but the fix is
 #         # already committed, so use revert instead:
-#     git revert --no-commit <T-02-commit-sha>
+#     git revert --no-commit <fix-commit-sha>
 #     sh tests/cases/ssh-unreachable-regression.sh    # expect FAIL
 #     git restore --source=HEAD --staged --worktree tests/run-ssh-hosts.sh
 #     sh tests/cases/ssh-unreachable-regression.sh    # expect PASS
@@ -82,7 +82,7 @@ HARNESS_RC=$?
 set -e
 
 # Assertion 1: the harness must exit 2 ("unable to reach one or more
-# hosts"), NOT 1 ("at least one host failed"). Pre-T-02 this was 1.
+# hosts"), NOT 1 ("at least one host failed"). Pre-fix this was 1.
 if [ "$HARNESS_RC" -ne 2 ]; then
     printf '[%s] FAIL: harness exited %d, expected 2 (UNREACHED)\n' \
         "$CASE_NAME" "$HARNESS_RC" >&2

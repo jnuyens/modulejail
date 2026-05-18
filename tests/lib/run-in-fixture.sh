@@ -68,7 +68,7 @@ printf '== [%s] (8) output is syntactically valid modprobe.d ==\n' "$DISTRO"
 bad=$(grep -Evc '^#|^install [a-zA-Z0-9_]+ /bin/true$|^install [a-zA-Z0-9_]+ /bin/sh -c .*logger -t modulejail.*; exit 0.*$|^$' /tmp/fixture-run1.conf || true)
 assert_eq 0 "$bad" syntactic-validity
 
-printf '== [%s] (9) PORT-01: no per-distro branches in modulejail ==\n' "$DISTRO"
+printf '== [%s] (9) no per-distro branches in modulejail ==\n' "$DISTRO"
 # Assert grep finds zero per-distro branch patterns (exits 1 = no match = pass).
 grep -qE '/etc/os-release|/etc/lsb-release|/etc/redhat-release|/etc/debian_version|ID_LIKE|ID=ubuntu|ID=debian|ID=rhel|ID=fedora|ID=arch|ID=alpine|ID=opensuse' /usr/local/bin/modulejail && { printf 'FAIL [%s]: per-distro branch found in modulejail\n' "$DISTRO" >&2; exit 1; } || true
 

@@ -1,7 +1,7 @@
 #!/bin/sh
 # Case: --no-syslog-logging forces the v1.1.4 /bin/true install-line form
-# regardless of whether /usr/bin/logger is present on the host (D-39
-# regression contract).
+# regardless of whether /usr/bin/logger is present on the host
+# (byte-identical regression contract).
 #
 # Always runs (no skip): the opt-out path must be deterministic across all
 # hosts, with or without logger. The header annotation must reflect the

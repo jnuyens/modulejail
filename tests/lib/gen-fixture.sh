@@ -1,10 +1,10 @@
 #!/bin/sh
 # Generate /lib/modules/6.99.0-fixture/ with touch-empty .ko* files and
-# a fake /proc/modules at /tmp/proc-modules. Phase 1's list_universe reads
-# only filenames (sub(/.*\//, ""), strip suffix, normalize -); empty files
-# satisfy it (RESEARCH §Pattern 6). The fake /proc/modules names a SUBSET
-# of the synthetic modules so the set arithmetic produces a non-empty,
-# non-degenerate blacklist that passes the >99% sanity guard.
+# a fake /proc/modules at /tmp/proc-modules. list_universe reads only
+# filenames (sub(/.*\//, ""), strip suffix, normalize -); empty files
+# satisfy it. The fake /proc/modules names a SUBSET of the synthetic
+# modules so the set arithmetic produces a non-empty, non-degenerate
+# blacklist that passes the >99% sanity guard.
 set -eu
 
 KVER=6.99.0-fixture
@@ -28,7 +28,7 @@ touch \
     "$TREE/crypto/sha256_generic.ko"
 
 # Pad to ~60 modules so the >99% sanity guard does not trip when keep-set
-# (loaded union baseline union whitelist) is small. Phase 1 baseline alone has 16
+# (loaded union baseline union whitelist) is small. The baseline alone has 16
 # entries; with ~10 "loaded" + 60 universe + ~16 baseline overlap, the
 # blacklist will be well under 99%.
 i=1

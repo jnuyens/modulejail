@@ -696,13 +696,13 @@ tmp=$(mktemp "${target_dir}/.modulejail-blacklist.conf.XXXXXX") || {
     printf '# kernel: %s\n' "$_kver"
     printf '# fingerprint: sha256:%s\n' "$fingerprint"
     if [ -n "$USE_LOGGER" ]; then
-        if [ -n "$FAIL_ON_MODULE_LOAD" ]; then
+        if [ "$FAIL_ON_MODULE_LOAD" -ne 0 ]; then
             printf '# install-line: /bin/sh + logger + /bin/false (syslog tag: modulejail, --fail-on-module-load)\n'
         else
             printf '# install-line: /bin/sh + logger + /bin/true (syslog tag: modulejail)\n'
         fi
     else
-        if [ -n "$FAIL_ON_MODULE_LOAD" ]; then
+        if [ "$FAIL_ON_MODULE_LOAD" -ne 0 ]; then
             printf '# install-line: /bin/false (--no-syslog-logging or logger absent, --fail-on-module-load present)\n'
         else
             printf '# install-line: /bin/true (silent, --no-syslog-logging or logger absent)\n'

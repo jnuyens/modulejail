@@ -34,6 +34,7 @@ WHITELIST_FILE=''
 NO_WHITELIST_FILE=''
 NO_SYSLOG_LOGGING=''
 USE_LOGGER=''
+FAIL_ON_MODULE_LOAD=0
 
 # Path checked for a site-local whitelist when --whitelist-file is not given.
 # When the file exists, it is loaded automatically with the same strict
@@ -107,6 +108,9 @@ usage() {
     printf '                    Force '\''/bin/true'\'' install lines (v1.1.4 behavior).\n'
     printf '                    By default, when /usr/bin/logger is present, blocked\n'
     printf '                    module loads are logged to syslog with tag '\''modulejail'\''.\n'
+    printf '  -f, --fail-on-module-load\n'
+    printf '                    When set, modprobe fails because the install command\n'
+    printf '                    returns a non-zero exit code for blacklisted modules.\n'
     printf '  -V, --version     Show program version and exit\n'
     printf '  -h, --help        Show this help text and exit\n'
     printf '\n'
@@ -179,6 +183,10 @@ while [ $# -gt 0 ]; do
             ;;
         --no-syslog-logging)
             NO_SYSLOG_LOGGING=1
+            shift
+            ;;
+        -f|--fail-on-module-load)
+            FAIL_ON_MODULE_LOAD=1
             shift
             ;;
         -h|--help)
@@ -558,6 +566,10 @@ parse_whitelist_file() {
 # When USE_LOGGER is empty: emit the v1.1.4 form
 #   install <name> /bin/true
 #
+# When FAIL_ON_MODULE_LOAD is set, /bin/true becomes /bin/false and
+# exit 0 becomes /bin/false, so modprobe returns an error for blacklisted
+# modules.
+#
 # awk-quoting note: the outer single-quotes around the awk program are
 # closed and reopened around each literal single-quote that has to land
 # in the install-line output ('"'"'"'"' is the canonical sh idiom). The
@@ -566,12 +578,22 @@ parse_whitelist_file() {
 # generation time by awk, so the emitted line carries a literal module
 # name, not a $name reference.
 emit_install_line() {
+    local install_final_cmd
+
+    if [ "$FAIL_ON_MODULE_LOAD" -eq 0 ]; then
+        install_final_cmd='/bin/true'
+    else
+        install_final_cmd='/bin/false'
+    fi
+
     if [ -n "$USE_LOGGER" ]; then
-        awk '{
-            printf "install %s /bin/sh -c '\''/usr/bin/logger -t modulejail \"blocked: %s\" 2>/dev/null; exit 0'\''\n", $1, $1
+        awk -v final="$install_final_cmd" '{
+            printf "install %s /bin/sh -c '\''/usr/bin/logger -t modulejail \"blocked: %s\" 2>/dev/null; %s'\''\n", $1, $1, final
         }' "$1"
     else
-        awk '{print "install " $1 " /bin/true"}' "$1"
+        awk -v final="$install_final_cmd" '{
+            printf "install %s %s\n", $1, final
+        }' "$1"
     fi
 }
 
@@ -674,9 +696,17 @@ tmp=$(mktemp "${target_dir}/.modulejail-blacklist.conf.XXXXXX") || {
     printf '# kernel: %s\n' "$_kver"
     printf '# fingerprint: sha256:%s\n' "$fingerprint"
     if [ -n "$USE_LOGGER" ]; then
-        printf '# install-line: /bin/sh + logger (syslog tag: modulejail)\n'
+        if [ -n "$FAIL_ON_MODULE_LOAD" ]; then
+            printf '# install-line: /bin/sh + logger + /bin/false (syslog tag: modulejail, --fail-on-module-load)\n'
+        else
+            printf '# install-line: /bin/sh + logger + /bin/true (syslog tag: modulejail)\n'
+        fi
     else
-        printf '# install-line: /bin/true (silent, --no-syslog-logging or logger absent)\n'
+        if [ -n "$FAIL_ON_MODULE_LOAD" ]; then
+            printf '# install-line: /bin/false (--no-syslog-logging or logger absent, --fail-on-module-load present)\n'
+        else
+            printf '# install-line: /bin/true (silent, --no-syslog-logging or logger absent)\n'
+        fi
     fi
     printf '# Do not edit by hand — regenerate with modulejail(8).\n'
     emit_install_line "$blacklist"

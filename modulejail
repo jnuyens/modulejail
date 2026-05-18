@@ -380,6 +380,18 @@ list_universe() {
             !sub(/\.ko$/, "", n)) next
         # Normalize - to _ (canonical underscore form)
         gsub(/-/, "_", n)
+        # WR-03 (Phase 3) defense-in-depth: reject names containing
+        # anything outside canonical kernel-module characters before
+        # they can land in /etc/modprobe.d/ install lines. The strict
+        # regex gate is what the project documentation positions as
+        # the safety guarantee for modprobe.d directives; without
+        # this line that guarantee only held for the --whitelist-file
+        # path (parse_whitelist_file) and not for the filesystem-walk
+        # path. Write access to /lib/modules/$KVER/ is root-equivalent
+        # today, so this is defense-in-depth, not a CVE fix. A legit
+        # kernel module basename always matches this regex post
+        # dash-to-underscore normalization; nothing real is dropped.
+        if (n !~ /^[a-zA-Z0-9_]+$/) next
         print n
     }' "$find_out" | sort -u
 }
@@ -390,7 +402,16 @@ list_universe() {
 list_loaded() {
     # /proc/modules path overridable via MODULEJAIL_PROC_MODULES
     # (test-only plumbing; see pre-flight gate above).
-    awk '{print $1}' "${MODULEJAIL_PROC_MODULES:-/proc/modules}" | sort -u
+    #
+    # WR-03 (Phase 3) defense-in-depth: apply the same canonical-name
+    # filter as list_universe for symmetry. Column 1 of /proc/modules
+    # is kernel-owned and trustworthy in practice, but the strict-regex
+    # gate that the project documentation positions as the guarantee
+    # for modprobe.d directives should hold uniformly across every
+    # source that feeds emit_install_line. A real loaded module always
+    # matches this regex; nothing legitimate is dropped.
+    awk '$1 ~ /^[a-zA-Z0-9_]+$/ {print $1}' \
+        "${MODULEJAIL_PROC_MODULES:-/proc/modules}" | sort -u
 }
 
 # Produce the two canonical input files for set arithmetic.

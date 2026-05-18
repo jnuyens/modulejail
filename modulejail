@@ -760,6 +760,7 @@ check_for_updates() {
         # are not needed.
         body=$(wget -q -T 10 -O - "$update_url" 2>/dev/null) || return 0
     else
+        printf 'modulejail: notice: no curl/wget in PATH, cannot check for update\n' >&2
         return 0
     fi
 

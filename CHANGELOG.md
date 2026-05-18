@@ -44,11 +44,13 @@ No new features, no UX changes.
   YAML or other indented source) is accepted rather than rejected as
   `EX_DATAERR`.
 - **WR-03 v1.0.0 / IN-01 v1.0.0:** README.md audited against the two
-  v1.0.0 carry-forward items. The dependency list at line 122-123
-  already named `comm` correctly (closes WR-03 v1.0.0); the stale
-  "420 lines" claim from the original v1.0.0 audit has been removed
-  from the README (the script has grown to ~750 lines and the claim
-  invites future rot — replaced with a qualitative phrasing).
+  v1.0.0 carry-forward items; both are already-discharged. The
+  dependency list at line 122-123 already names `awk, comm, find,
+  sha256sum, and standard coreutils` correctly (the script truly
+  invokes none of `grep`, `sed`); the stale "420 lines" claim was
+  already removed from the README in an earlier edit (the script has
+  grown well past that — wc -l now reports a much larger number and
+  any pinned count would invite future rot). No further edits needed.
 
 ### Security
 

@@ -15,6 +15,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   group- or world-writable files, and appends valid names to the in-script
   `WHITELIST`. Operators no longer lose site-local additions on
   `.deb` / `.rpm` / `curl | sh` reinstalls.
+- **Default path** `/etc/modulejail/whitelist.conf`. When the flag is not
+  passed and this file exists, ModuleJail auto-detects it with the same
+  strict mode and content gates and prints an `info:` line on stderr so
+  the choice is never silent. Addresses the silent-error-on-forgotten-flag
+  concern raised by @bpmartin20 and @james-rimu in
+  [#2](https://github.com/jnuyens/modulejail/issues/2).
+- New `--no-whitelist-file` flag to skip the default file for a single run.
+  Mutually exclusive with `--whitelist-file PATH` (combining exits
+  `64 EX_USAGE` with a clear error).
 - New `--no-syslog-logging` flag. Forces the v1.1.4-style
   `install <name> /bin/true` install-line body, for operators who require
   byte-identical output across versions or run on hosts without
@@ -24,14 +33,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New `MODULEJAIL_MODULES_ROOT` env-var override (test-only plumbing) — lets
   host-local test cases on non-Linux dev boxes exercise the full pipeline
   against a synthetic `/lib/modules` tree.
+- New `MODULEJAIL_DEFAULT_WHITELIST_FILE` env-var override (test-only plumbing)
+  for the default-path auto-detection.
 - New header annotation `# install-line: ...` documents which install-line
   form is in the generated file.
 - New regression fixture under `tests/fixtures/v1.1.4-regression/` pinning
   v1.1.4 output as a permanent baseline (`tests/cases/v1.1.4-regression.sh`).
-- Eight new acceptance cases under `tests/cases/`: five for `--whitelist-file`
+- Twelve new acceptance cases under `tests/cases/`: nine for `--whitelist-file`
   (happy path, missing file, bad permissions, malformed module name,
-  comments-and-blanks), three for the logger install-line forms
-  (default-on, opt-out, absent-fallback).
+  comments-and-blanks, default-path used, default-path opt-out via
+  `--no-whitelist-file`, dash-form normalisation regression,
+  `--whitelist-file PATH` + `--no-whitelist-file` mutual exclusion),
+  three for the logger install-line forms (default-on, opt-out, absent-fallback).
+
+### Fixed
+
+- Whitelist-file entries written in dash form (`nft-compat`) are now
+  normalised to underscore form before joining the keep-set, matching the
+  documented behaviour and the normalisation already applied by
+  `list_baseline` / `list_whitelist` / `list_universe`. Before this fix,
+  dash-form entries silently failed to match `/proc/modules`'s underscore
+  form and the module was blacklisted anyway. Caught by the v1.2 code-review
+  gate before release.
 
 ### Changed
 

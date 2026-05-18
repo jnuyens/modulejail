@@ -210,15 +210,31 @@ anchors are designed for Ansible template insertion (`lineinfile` or
 
 ## Site-local whitelist file
 
-Since v1.2, ModuleJail can also read site-local modules from an external
-file via `--whitelist-file PATH`. This is the preferred path when you do
-not want to (or cannot) edit the script in place — for instance because
-you install ModuleJail via `.deb` / `.rpm` / `curl | sh` and your
-site-local additions would otherwise be lost on the next reinstall.
+Since v1.2, ModuleJail reads site-local modules from an external file.
+This is the preferred path when you do not want to (or cannot) edit the
+script in place — for instance because you install ModuleJail via
+`.deb` / `.rpm` / `curl | sh` and your site-local additions would
+otherwise be lost on the next reinstall.
+
+The default path is `/etc/modulejail/whitelist.conf`. If the file
+exists, ModuleJail auto-detects it and prints an `info:` line on
+stderr so the choice is not silent:
+
+```
+modulejail: info: using default whitelist file /etc/modulejail/whitelist.conf (--no-whitelist-file to opt out)
+```
+
+To skip the default for a single run (e.g. during recovery), pass
+`--no-whitelist-file`. To use a different location, pass
+`--whitelist-file PATH`.
+
+File format:
 
 ```sh
 # /etc/modulejail/whitelist.conf
 # One module per line. Blank lines and '#' comments are allowed.
+# Names may be written in either dash or underscore form ("nft-compat"
+# or "nft_compat") — the pipeline normalises - to _.
 # The file mode MUST NOT be group-writable or world-writable
 # (ModuleJail will refuse to run otherwise).
 
@@ -227,15 +243,20 @@ xt_owner
 zfs
 ```
 
-Then run:
+Three ways to invoke:
 
 ```sh
-sudo modulejail --whitelist-file /etc/modulejail/whitelist.conf
-```
+# 1. Default location (recommended for production deploys):
+sudo install -d -m 0755 /etc/modulejail
+sudo install -m 0644 my-whitelist /etc/modulejail/whitelist.conf
+sudo modulejail   # auto-detects /etc/modulejail/whitelist.conf
 
-The path is yours to choose; ModuleJail has no default location. Common
-choices on different distros are `/etc/modulejail/whitelist.conf`,
-`/etc/default/modulejail-whitelist`, or an NFS-mounted site-config path.
+# 2. Explicit non-default path (override or use a site-local NFS mount):
+sudo modulejail --whitelist-file /etc/default/modulejail-whitelist
+
+# 3. Skip the default for one run (force "no site-local additions"):
+sudo modulejail --no-whitelist-file
+```
 
 The file is appended to the in-script `WHITELIST`; the two are additive.
 Operators who have been editing the in-script `WHITELIST` (the v1.0

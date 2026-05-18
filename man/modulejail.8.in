@@ -114,8 +114,28 @@ exits
 .RB ( EX_NOPERM )
 and prints a
 .B chmod go-w
-hint. There is no default path; the operator picks where it lives.
+hint. When this flag is not given,
+.B modulejail
+auto-detects
+.I /etc/modulejail/whitelist.conf
+and uses it if present (and prints an
+.B info:
+line on stderr noting the choice). Pass
+.B \-\-no\-whitelist\-file
+to skip the default for one run.
 Available since v1.2.
+.TP
+.BR \-\-no\-whitelist\-file
+Skip the default whitelist file even if
+.I /etc/modulejail/whitelist.conf
+is present. Mutually exclusive with
+.B \-\-whitelist\-file
+.IR path ;
+combining them exits
+.B 64
+.RB ( EX_USAGE ).
+Use during recovery, or when you want a guaranteed-empty external
+whitelist contribution for a single run. Available since v1.2.
 .TP
 .BR \-\-no\-syslog\-logging
 Force the v1.1.4-style
@@ -176,6 +196,17 @@ preferred path when modulejail is installed via
 .B "curl | sh"
 and editing the script in place would lose site-local additions on the
 next reinstall.
+.PP
+If the flag is not passed,
+.B modulejail
+auto-detects
+.I /etc/modulejail/whitelist.conf
+and uses it when present, with the same strict mode and content gates as
+an explicitly-passed path. An
+.B info:
+line is printed on stderr so the choice is never silent. Pass
+.B \-\-no\-whitelist\-file
+to opt out for one run.
 .PP
 File format:
 .RS 4

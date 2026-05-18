@@ -16,6 +16,10 @@ export MODULEJAIL_KVER=6.99.0-fixture
 # runs are hermetic (no network calls). Specific update-check assertions
 # below toggle this variable explicitly.
 export MODULEJAIL_NO_UPDATE_CHECK=1
+# Point the default-whitelist-file detector at a path that does not exist
+# inside the container, so fixture runs are isolated from any
+# /etc/modulejail/whitelist.conf that might be baked into a base image.
+export MODULEJAIL_DEFAULT_WHITELIST_FILE=/tmp/default-whitelist-absent.conf
 
 # Version-agnostic SemVer regex. The v1.0.0 fixture hardcoded the literal
 # string "1.0.0", which broke every fixture run after the first version

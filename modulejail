@@ -31,8 +31,19 @@ EX_NOPERM=77
 profile=conservative
 output=/etc/modprobe.d/modulejail-blacklist.conf
 WHITELIST_FILE=''
+NO_WHITELIST_FILE=''
 NO_SYSLOG_LOGGING=''
 USE_LOGGER=''
+
+# Path checked for a site-local whitelist when --whitelist-file is not given.
+# When the file exists, it is loaded automatically with the same strict
+# validation as --whitelist-file. When absent, no error (mirrors v1.1.4
+# behavior for hosts that don't ship one). Operators opt out with
+# --no-whitelist-file or by removing the file.
+#
+# Overridable via MODULEJAIL_DEFAULT_WHITELIST_FILE for test fixtures (test-only
+# plumbing, cf. MODULEJAIL_PROC_MODULES / MODULEJAIL_KVER / MODULEJAIL_LOGGER_PATH).
+DEFAULT_WHITELIST_FILE="${MODULEJAIL_DEFAULT_WHITELIST_FILE:-/etc/modulejail/whitelist.conf}"
 
 # --- Built-in baseline module lists (space-separated strings, not bash arrays) ---
 # Each profile inherits from the one above via variable interpolation (DRY).
@@ -87,6 +98,11 @@ usage() {
     printf '                    Append module names from PATH to the keep-set.\n'
     printf '                    One module per line; '\''#'\'' starts a comment.\n'
     printf '                    File must not be group- or world-writable.\n'
+    printf '                    Default (auto-detected if present and no flag passed):\n'
+    printf '                    /etc/modulejail/whitelist.conf\n'
+    printf '  --no-whitelist-file\n'
+    printf '                    Skip the default whitelist file even if present.\n'
+    printf '                    Mutually exclusive with --whitelist-file PATH.\n'
     printf '  --no-syslog-logging\n'
     printf '                    Force '\''/bin/true'\'' install lines (v1.1.4 behavior).\n'
     printf '                    By default, when /usr/bin/logger is present, blocked\n'
@@ -100,8 +116,9 @@ usage() {
     printf '  desktop       Conservative + WiFi, Bluetooth, audio, video drivers\n'
     printf '\n'
     printf 'Defaults:\n'
-    printf '  profile: conservative\n'
-    printf '  output:  /etc/modprobe.d/modulejail-blacklist.conf\n'
+    printf '  profile:        conservative\n'
+    printf '  output:         /etc/modprobe.d/modulejail-blacklist.conf\n'
+    printf '  whitelist file: /etc/modulejail/whitelist.conf (auto-detected if present)\n'
     printf '\n'
     printf 'Exit codes:\n'
     printf '  0   success\n'
@@ -118,6 +135,10 @@ usage() {
     printf '                               check for a newer release on GitHub.\n'
     printf '  MODULEJAIL_LOGGER_PATH       Path to the logger binary used for the syslog\n'
     printf '                               install-line detection (default: /usr/bin/logger).\n'
+    printf '                               Test-only plumbing; end-user operators leave unset.\n'
+    printf '  MODULEJAIL_DEFAULT_WHITELIST_FILE\n'
+    printf '                               Override the auto-detected whitelist path\n'
+    printf '                               (default: /etc/modulejail/whitelist.conf).\n'
     printf '                               Test-only plumbing; end-user operators leave unset.\n'
 }
 
@@ -150,6 +171,10 @@ while [ $# -gt 0 ]; do
         --whitelist-file=*)
             WHITELIST_FILE="${1#*=}"
             [ -n "$WHITELIST_FILE" ] || { printf 'modulejail: error: --whitelist-file= requires non-empty PATH\n' >&2; exit $EX_USAGE; }
+            shift
+            ;;
+        --no-whitelist-file)
+            NO_WHITELIST_FILE=1
             shift
             ;;
         --no-syslog-logging)
@@ -186,6 +211,29 @@ case "$profile" in
     minimal|conservative|desktop) ;;
     *) printf 'modulejail: error: unknown profile: %s (expected minimal, conservative, desktop)\n' "$profile" >&2; exit $EX_USAGE ;;
 esac
+
+# --- Reject contradictory whitelist-file flags ---
+# Explicit-path-plus-opt-out is ambiguous; refuse rather than silently
+# letting one win.
+if [ -n "$WHITELIST_FILE" ] && [ -n "$NO_WHITELIST_FILE" ]; then
+    printf 'modulejail: error: --whitelist-file PATH and --no-whitelist-file are mutually exclusive\n' >&2
+    exit $EX_USAGE
+fi
+
+# --- Default whitelist file auto-detection ---
+# Per Issue #2 followup (bpmartin20, james-rimu, 2026-05): a default path
+# under /etc/modulejail/ catches the "forgot the flag" silent-error case.
+# Only kick in when:
+#   - user did not pass --whitelist-file PATH, AND
+#   - user did not pass --no-whitelist-file, AND
+#   - the default file exists.
+# Validation/permission gate inside parse_whitelist_file runs the same way
+# as for an explicit path — an existing but malformed/unsafe default file
+# is a loud error, never a silent skip.
+if [ -z "$WHITELIST_FILE" ] && [ -z "$NO_WHITELIST_FILE" ] && [ -e "$DEFAULT_WHITELIST_FILE" ]; then
+    WHITELIST_FILE="$DEFAULT_WHITELIST_FILE"
+    printf 'modulejail: info: using default whitelist file %s (--no-whitelist-file to opt out)\n' "$DEFAULT_WHITELIST_FILE" >&2
+fi
 
 # --- Logger detection (generation-time, per D-37) ---
 # The opt-out flag NO_SYSLOG_LOGGING wins. Otherwise, emit the logger
@@ -476,9 +524,15 @@ list_baseline > "$workdir/baseline.txt"
 # top-level script. Capture its output to a tempfile, then merge with
 # list_whitelist via sort -u.
 parse_whitelist_file "$WHITELIST_FILE" > "$workdir/whitelist-file.txt"
+# Normalize dash to underscore, parallel to list_whitelist / list_baseline /
+# list_universe. The manpage and README document that whitelist entries may
+# be written in either form ("nft-compat" or "nft_compat"); /proc/modules
+# and the universe walker always report the underscore form, so without
+# this normalization a dash-form entry never joined the keep-set and the
+# module was silently blacklisted. (Caught by the v1.2 code-review gate.)
 {
     list_whitelist
-    cat "$workdir/whitelist-file.txt"
+    tr '-' '_' < "$workdir/whitelist-file.txt"
 } | sort -u > "$workdir/whitelist.txt"
 
 # Compose total keep-list: loaded modules union baseline union whitelist (sorted, deduped).

@@ -77,7 +77,12 @@ MODULEJAIL_MODULES_ROOT=$CASE_MODULES_ROOT
 MODULEJAIL_KVER=$CASE_KVER
 MODULEJAIL_PROC_MODULES=$CASE_PROC
 MODULEJAIL_NO_UPDATE_CHECK=1
-export MODULEJAIL_MODULES_ROOT MODULEJAIL_KVER MODULEJAIL_PROC_MODULES MODULEJAIL_NO_UPDATE_CHECK
+# Point the default-whitelist-file detector at a path inside $CASE_TMP that
+# does not exist. This isolates cases from any /etc/modulejail/whitelist.conf
+# that may exist on a developer's machine or a CI runner. Cases that want
+# to exercise the default-detection path override this themselves.
+MODULEJAIL_DEFAULT_WHITELIST_FILE=$CASE_TMP/default-whitelist-absent.conf
+export MODULEJAIL_MODULES_ROOT MODULEJAIL_KVER MODULEJAIL_PROC_MODULES MODULEJAIL_NO_UPDATE_CHECK MODULEJAIL_DEFAULT_WHITELIST_FILE
 
 # Convenience helpers --------------------------------------------------------
 

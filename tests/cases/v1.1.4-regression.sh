@@ -91,6 +91,7 @@ MODULEJAIL_MODULES_ROOT=$CASE_TMP/lib/modules \
 MODULEJAIL_KVER=$KVER \
 MODULEJAIL_PROC_MODULES=$FIXTURE_DIR/proc-modules \
 MODULEJAIL_NO_UPDATE_CHECK=1 \
+MODULEJAIL_DEFAULT_WHITELIST_FILE=$CASE_TMP/default-whitelist-absent.conf \
 "$MODULEJAIL_BIN" -p conservative --no-syslog-logging -o "$ACTUAL" > "$CASE_TMP/stdout" 2> "$CASE_TMP/stderr" || {
     rc=$?
     printf '[%s] FAIL: modulejail exited %d (expected 0); stderr=%s\n' \

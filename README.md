@@ -44,6 +44,22 @@ curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.2.3/modulejai
 > **WARNING: convenient, not safe.** This pipes unverified bytes from the
 > network to a root shell. The safer alternative below is the recommended path.
 
+> [!TIP]
+> **On a laptop or workstation? Add `-p desktop`.**
+>
+> The default profile is `conservative` (servers and VMs). It does NOT
+> include WiFi, Bluetooth, audio, or video drivers in the baseline, so
+> if any of those happen not to be loaded at run time (WiFi disconnected,
+> Bluetooth off, headset unplugged, etc.), they may end up blacklisted
+> and unavailable on the next boot. The `desktop` profile keeps them in
+> the keep-list unconditionally.
+>
+> ```sh
+> curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.2.3/modulejail | sudo sh -s -- -p desktop
+> ```
+>
+> See [Profiles](#profiles) below for the full list.
+
 The script writes its blacklist to `/etc/modprobe.d/modulejail-blacklist.conf`
 by default. To use a different path:
 

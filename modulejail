@@ -148,6 +148,7 @@ usage() {
 }
 
 # --- Argument parser (manual case loop — POSIX, supports long options) ---
+invocation="$0 $@"
 while [ $# -gt 0 ]; do
     case "$1" in
         -p|--profile)
@@ -688,13 +689,13 @@ tmp=$(mktemp "${target_dir}/.modulejail-blacklist.conf.XXXXXX") || {
     exit $EX_CANTCREAT
 }
 
-# Write 7-line header + one install line per blacklisted module. The install
+# Write 8-line header + one install line per blacklisted module. The install
 # line takes one of two forms depending on the generation-time logger
 # detection (see USE_LOGGER above); emit_install_line picks the right form
 # and the header documents which one was chosen.
 # Header contains tool version + repo URL + profile + kernel + sha256 fingerprint +
-# install-line annotation + edit-by-hand disclaimer. NO wall-clock; header is
-# a deterministic function of inputs. Fingerprint is computed above the
+# install-line annotation + invocation + edit-by-hand disclaimer. NO wall-clock;
+# header is a deterministic function of inputs. Fingerprint is computed above the
 # render block.
 {
     printf '# modulejail %s\n' "$VERSION"
@@ -715,6 +716,7 @@ tmp=$(mktemp "${target_dir}/.modulejail-blacklist.conf.XXXXXX") || {
             printf '# install-line: /bin/false (silent, --fail-on-module-load)\n'
         fi
     fi
+    printf '# invocation: %s\n' "$invocation"
     printf '# Do not edit by hand — regenerate with modulejail(8).\n'
     emit_install_line "$blacklist"
 } > "$tmp"

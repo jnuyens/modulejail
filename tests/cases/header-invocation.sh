@@ -47,7 +47,8 @@ OUT="$CASE_TMP/out'put.conf"
     case_fail "modulejail exited $? (expected 0); stderr=$(cat "$CASE_TMP/stderr")"
 
 # Header invocation test args with single quotes
-assert_grep "^# invocation: $MODULEJAIL_BIN -o '$CASE_TMP/out'''put.conf'$" \
+head "$OUT"
+assert_grep "^# invocation: $MODULEJAIL_BIN -o '$CASE_TMP/out'\\\\''put.conf'$" \
     "$OUT" header-invocation-args-with-single-quotes
 
 case_pass

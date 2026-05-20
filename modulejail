@@ -150,7 +150,7 @@ usage() {
 quote_arg() {
     case "$1" in
         ""|*[!a-zA-Z0-9._/=-]*)
-            printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\''/g")"
+            printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
             ;;
         *)
             printf '%s' "$1"

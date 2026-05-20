@@ -147,8 +147,26 @@ usage() {
     printf '                               Test-only plumbing; end-user operators leave unset.\n'
 }
 
+quote_arg() {
+    case "$1" in
+        ""|*[!a-zA-Z0-9._/=-]*)
+            printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\''/g")"
+            ;;
+        *)
+            printf '%s' "$1"
+            ;;
+    esac
+}
+
+# --- Reproducible invocation string ---
+# When the script is piped into sh (like: `curl ... | sh`) $0 is 'sh' and $@ empty.
+# In other cases (even `sh -c '...'`) $invocation is script + arguments, properly quoted.
+invocation=$(quote_arg "$0")
+for arg in "$@"; do
+    invocation="$invocation $(quote_arg "$arg")"
+done
+
 # --- Argument parser (manual case loop — POSIX, supports long options) ---
-invocation="$0 $@"
 while [ $# -gt 0 ]; do
     case "$1" in
         -p|--profile)

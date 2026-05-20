@@ -289,6 +289,13 @@ visible cue. Use
 .B \-\-no\-syslog\-logging
 explicitly when the v1.1.4 install-line body is a hard requirement.
 
+.SH INVOCATION
+A header line starting with
+.B # invocation:
+is added to the blacklist, which registers the invocation that was used
+to produce the blacklist, and can be copied and pasted into the terminal
+for reproducible results.
+
 .SH SCOPE OF THE BLACKLIST
 A
 .BR modprobe.d (5)

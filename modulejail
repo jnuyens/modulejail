@@ -147,6 +147,25 @@ usage() {
     printf '                               Test-only plumbing; end-user operators leave unset.\n'
 }
 
+quote_arg() {
+    case "$1" in
+        ""|*[!a-zA-Z0-9._/=-]*)
+            printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\''/g")"
+            ;;
+        *)
+            printf '%s' "$1"
+            ;;
+    esac
+}
+
+# --- Reproducible invocation string ---
+# When the script is piped into sh (like: `curl ... | sh`) $0 is 'sh' and $@ empty.
+# In other cases (even `sh -c '...'`) $invocation is script + arguments, properly quoted.
+invocation=$(quote_arg "$0")
+for arg in "$@"; do
+    invocation="$invocation $(quote_arg "$arg")"
+done
+
 # --- Argument parser (manual case loop — POSIX, supports long options) ---
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -688,13 +707,13 @@ tmp=$(mktemp "${target_dir}/.modulejail-blacklist.conf.XXXXXX") || {
     exit $EX_CANTCREAT
 }
 
-# Write 7-line header + one install line per blacklisted module. The install
+# Write 8-line header + one install line per blacklisted module. The install
 # line takes one of two forms depending on the generation-time logger
 # detection (see USE_LOGGER above); emit_install_line picks the right form
 # and the header documents which one was chosen.
 # Header contains tool version + repo URL + profile + kernel + sha256 fingerprint +
-# install-line annotation + edit-by-hand disclaimer. NO wall-clock; header is
-# a deterministic function of inputs. Fingerprint is computed above the
+# install-line annotation + invocation + edit-by-hand disclaimer. NO wall-clock;
+# header is a deterministic function of inputs. Fingerprint is computed above the
 # render block.
 {
     printf '# modulejail %s\n' "$VERSION"
@@ -715,6 +734,7 @@ tmp=$(mktemp "${target_dir}/.modulejail-blacklist.conf.XXXXXX") || {
             printf '# install-line: /bin/false (silent, --fail-on-module-load)\n'
         fi
     fi
+    printf '# invocation: %s\n' "$invocation"
     printf '# Do not edit by hand — regenerate with modulejail(8).\n'
     emit_install_line "$blacklist"
 } > "$tmp"

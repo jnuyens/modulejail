@@ -104,7 +104,7 @@ MODULEJAIL_DEFAULT_WHITELIST_FILE=$CASE_TMP/default-whitelist-absent.conf \
 # match the archived v1.1.4 reference.
 EXPECTED_FILTERED=$CASE_TMP/expected.body
 ACTUAL_FILTERED=$CASE_TMP/actual.body
-grep -v -E '^# modulejail |^# fingerprint:|^# install-line:' \
+grep -v -E '^# modulejail |^# fingerprint:|^# install-line:|^# invocation:' \
     "$FIXTURE_DIR/expected-blacklist.conf" > "$EXPECTED_FILTERED"
 grep -v -E '^# modulejail |^# fingerprint:|^# install-line:' \
     "$ACTUAL" > "$ACTUAL_FILTERED"

@@ -128,6 +128,10 @@ when `/usr/bin/logger` is available, so blocked attempts produce a syslog
 trail) or `/bin/true` (under `--no-syslog-logging`, silent fallback, or when
 logger is absent). See the *Viewing blocked module attempts* section below.
 
+The invocation used to create the blacklist file is noted in the header line
+that starts with `invocation:`, and can be copied & pasted for reproducible
+results.
+
 The tool is aimed at Linux fleet operators who need to harden many servers
 against the wave of AI-assisted kernel privilege-escalation discoveries. Every
 additional loaded module is additional latent attack surface for the next

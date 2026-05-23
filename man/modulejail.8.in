@@ -18,6 +18,10 @@ modulejail \- shrink a Linux host's kernel-module attack surface
 .RB [ \-\-whitelist\-file
 .IR path ]
 .RB [ \-\-no\-syslog\-logging ]
+.RB [ \-\-dry\-run ]
+.RB [ \-\-quiet | \-\-verbose ]
+.RB [ \-\-output\-format
+.IR format ]
 .br
 .B modulejail
 .RB { \-h | \-\-help | \-V | \-\-version }
@@ -74,13 +78,30 @@ additional latent attack surface for the next disclosed CVE.
 
 .SH OPTIONS
 .TP
-.BR \-p ", " \-\-profile " " {minimal|conservative|desktop}
+.BR \-p ", " \-\-profile " " {minimal|conservative|desktop|none}
 Select the built-in baseline profile of always-preserved modules
 (default:
 .BR conservative ).
 See
 .B PROFILES
 below.
+.PP
+The special value
+.B none
+zeroes the built-in baseline; the keep-set becomes the union of currently
+loaded modules, the in-script
+.BR WHITELIST ,
+and any
+.B \-\-whitelist\-file
+additions. The
+.B >99%
+blacklist sanity guard is disabled under
+.B \-p\ none
+(the loaded-keep invariant remains the boot-safety contract).
+recommended only when
+.B \-\-whitelist\-file
+is supplied, so that essential modules not currently loaded are still
+preserved. Available since v1.3.
 .TP
 .BR \-o ", " \-\-output " " \fIpath\fR
 Write the generated blacklist to
@@ -128,7 +149,7 @@ Available since v1.2.
 .BR \-\-no\-whitelist\-file
 Skip the default whitelist file even if
 .I /etc/modulejail/whitelist.conf
-is present. Mutually exclusive with
+is present. mutually exclusive with
 .B \-\-whitelist\-file
 .IR path ;
 combining them exits
@@ -145,6 +166,83 @@ v1.2. Use this on hosts without
 .IR /usr/bin/logger ,
 in minimal or initramfs builds, or when a byte-identical regression
 contract across versions is required. Available since v1.2.
+.TP
+.BR \-\-dry\-run
+Simulate the full pipeline without writing any file. Prints a one-line
+.B DRY-RUN: would blacklist
+summary to stdout (or a JSON/logfmt object when
+.B \-\-output\-format
+is set). Prints the would-be 8-line header block to stderr (unless
+.B \-\-quiet
+is also set). Writes nothing under
+.IR /etc/modprobe.d/
+or the path passed to
+.BR \-o .
+Exits
+.B 0
+on simulated success.
+Useful for previewing what would be blacklisted before committing a
+profile change or whitelist edit. Available since v1.3.
+.TP
+.BR \-\-quiet
+Suppress all non-error stderr output: the default-whitelist
+.B info:
+line, the
+.B \-p\ none
+.B info:
+line, the dry-run would-be header block, and the update-check
+.B notice:
+line. Also suppresses the stdout summary line. Severity-prefixed
+.B error:
+messages on stderr are never suppressed, so
+.BR EX_USAGE ,
+.BR EX_NOPERM ,
+and
+.B EX_SOFTWARE
+failures remain visible. mutually exclusive with
+.BR \-\-verbose ;
+combining them exits
+.B 64
+.RB ( EX_USAGE ).
+Available since v1.3.
+.TP
+.BR \-\-verbose
+Emit one decision line per module to stderr, in the form
+.B "keep: NAME (loaded|whitelist|baseline)"
+or
+.BR "blacklist: NAME" .
+Reasons are shown only for
+.B keep
+lines. Precedence among keep-sources: loaded > whitelist > baseline. These
+lines carry no severity prefix (they are operator-requested telemetry, not
+script-status diagnostics). mutually exclusive with
+.BR \-\-quiet ;
+combining them exits
+.B 64
+.RB ( EX_USAGE ).
+Available since v1.3.
+.TP
+.BR \-\-output\-format " " {json|logfmt}
+Emit a single-line machine-readable run summary on stdout
+.I instead
+of the human-readable summary line. Valid formats are
+.B json
+and
+.BR logfmt .
+See
+.B OUTPUT FORMATS
+below for the full 11-field schema v1. The machine-readable output is
+not silenced by
+.BR \-\-quiet ;
+it is the parser surface. Combinable with
+.B \-\-dry\-run
+(the JSON/logfmt
+.B dry_run
+field becomes
+.B true
+and
+.B output_path
+is the would-be path; no file is written). Available since v1.3.
 .TP
 .BR \-V ", " \-\-version
 Print version, repository URL, and license, then exit
@@ -248,6 +346,80 @@ and prints
 .B chmod go-w PATH
 as the remediation hint.
 
+.SH OUTPUT FORMATS
+When
+.B \-\-output\-format\ json
+or
+.B \-\-output\-format\ logfmt
+is passed,
+.B modulejail
+emits a single-line machine-readable run summary to stdout instead of
+the human-readable line. The schema is small, versioned, and
+additive-only across future schema versions.
+.SS "Schema version 1 fields"
+.RS 4
+.EX
+schema_version    integer  (always 1)
+tool              object   {name, version}
+kernel_version    string   (host uname -r output)
+profile           string   (minimal|conservative|desktop|none)
+dry_run           boolean  (true when --dry-run was passed)
+whitelist_file    string or null  (null when no --whitelist-file)
+modules_available integer  (total .ko* files under /lib/modules/KVER)
+modules_loaded    integer  (lines in /proc/modules at snapshot time)
+modules_blacklisted integer (entries written to the output file)
+fingerprint       string   (64-char lowercase hex, no "sha256:" prefix)
+output_path       string   (target path; under --dry-run, the would-be path)
+.EE
+.RE
+.SS "JSON example"
+.RS 4
+.EX
+{"schema_version":1,"tool":{"name":"modulejail","version":"1.3.0"},
+ "kernel_version":"6.8.0-31-generic","profile":"conservative",
+ "dry_run":false,"whitelist_file":"/etc/modulejail/whitelist.conf",
+ "modules_available":4912,"modules_loaded":47,
+ "modules_blacklisted":4810,"fingerprint":"a3f5b9c2e1d4...",
+ "output_path":"/etc/modprobe.d/modulejail-blacklist.conf"}
+.EE
+.RE
+.SS "logfmt example"
+.RS 4
+.EX
+schema_version=1 tool_name=modulejail tool_version=1.3.0 kernel_version=6.8.0-31-generic profile=conservative dry_run=false whitelist_file=/etc/modulejail/whitelist.conf modules_available=4912 modules_loaded=47 modules_blacklisted=4810 fingerprint=a3f5b9c2e1d4... output_path=/etc/modprobe.d/modulejail-blacklist.conf
+.EE
+.RE
+.SS "Fingerprint format"
+The
+.B fingerprint
+field in JSON and logfmt output is raw 64-character lowercase hex
+without the
+.B sha256:
+prefix that appears in the generated file header
+.RB ( "# fingerprint: sha256:HEX" ).
+Machine consumers parsing via
+.BR jq (1)
+or awk do not need string slicing to extract the hash; the file header
+keeps the algorithm tag for human auditability.
+.SS "Schema stability contract"
+.B schema_version=1
+is stable. Future schema versions are strictly additive: new fields may
+be added; renames and removals require
+.BR schema_version=2 .
+This mirrors the reproducible-builds.org stability convention: field
+semantics locked once published.
+.SS "Known limitation"
+Operator-supplied paths containing a literal double-quote character
+.RB ( \[dq] ),
+a backslash
+.RB ( \e ),
+or a newline are not JSON-escaped in the v1 schema. Real-world paths
+essentially never contain these characters, but operators using exotic
+paths may receive malformed JSON and a
+.BR jq (1)
+parse error. A future
+.B schema_version
+may add full path escaping.
 .SH VIEWING BLOCKED ATTEMPTS
 Since v1.2, when
 .I /usr/bin/logger
@@ -296,6 +468,66 @@ is added to the blacklist, which registers the invocation that was used
 to produce the blacklist, and can be copied and pasted into the terminal
 for reproducible results.
 
+.SH HEADER FIELDS
+The generated blacklist file carries an 8-line
+.B #
+-prefixed header documenting the tool version, repository, generation
+profile, host kernel, fingerprint, install-line form, invocation, and
+a do-not-edit-by-hand disclaimer.
+.TP
+.B "# modulejail VERSION"
+Tool name and version that produced the file.
+.TP
+.B "# https://github.com/jnuyens/modulejail"
+Repository URL for reproducibility and auditing.
+.TP
+.B "# profile: PROFILE"
+The profile name passed to
+.B \-p
+(or
+.B conservative
+when the default was used).
+.TP
+.B "# kernel: KVER"
+The host kernel version string from
+.BR "uname -r"
+at the time modulejail ran. This is the same value as the
+.B kernel_version
+field in the JSON and logfmt output (see
+.B OUTPUT FORMATS
+above).
+.TP
+.B "# fingerprint: sha256:HEX"
+A sha256 hash over canonical inputs: sorted loaded-module set, sorted
+baseline, sorted whitelist, profile name, and kernel version. The
+.B sha256:
+prefix identifies the algorithm for human readers; the JSON and logfmt
+.B fingerprint
+field strips this prefix and carries raw hex only.
+.TP
+.B "# install-line: FORM"
+Records which install-line body is in use:
+.B "/bin/sh + logger (syslog tag: modulejail)"
+or
+.BR "/bin/true (silent, --no-syslog-logging or logger absent)" .
+.TP
+.B "# invocation: ARGV-STRING"
+The full command line that produced the file, in POSIX-canonical
+single-quote encoding. See
+.B INVOCATION
+above.
+.TP
+.B "# Do not edit by hand -- regenerate with modulejail(8)."
+Disclaimer. Edits are overwritten on the next run.
+.PP
+This section satisfies the HDR-01 documentation requirement. The
+.B # kernel:
+line is the regression-lock target: test suite fixture
+.I header-kernel-line-locked.sh
+asserts that this line exists and carries a non-empty kernel-version
+token in every generated file. See
+.B OUTPUT FORMATS
+for the machine-readable schema that parallels these header fields.
 .SH SCOPE OF THE BLACKLIST
 A
 .BR modprobe.d (5)

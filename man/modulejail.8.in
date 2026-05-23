@@ -172,7 +172,10 @@ Simulate the full pipeline without writing any file. Prints a one-line
 .B DRY-RUN: would blacklist
 summary to stdout (or a JSON/logfmt object when
 .B \-\-output\-format
-is set). Prints the would-be 8-line header block to stderr (unless
+is set). Prints the would-be 8-line header block plus the full set of
+would-be
+.B install
+directives to stderr (unless
 .B \-\-quiet
 is also set). Writes nothing under
 .IR /etc/modprobe.d/
@@ -182,7 +185,8 @@ Exits
 .B 0
 on simulated success.
 Useful for previewing what would be blacklisted before committing a
-profile change or whitelist edit. Available since v1.3.
+profile change or whitelist edit; redirect stderr to a file to capture
+the preview output. Available since v1.3.
 .TP
 .BR \-\-quiet
 Suppress all non-error stderr output: the default-whitelist

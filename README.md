@@ -449,6 +449,7 @@ ModuleJail has been verified across two confidence tiers.
 | Ubuntu 24.04.4 LTS (Noble Numbat) | 6.8.0-110-generic | PASS (6363 of 6474 modules blacklisted) |
 | Debian GNU/Linux 13.4 (trixie) | 6.12.74+deb13+1-amd64 | PASS (4091 of 4227 modules blacklisted) |
 | Rocky Linux 9.7 (Blue Onyx) | 5.14.0-503.35.1.el9_5.x86_64 | PASS (2253 of 2338 modules blacklisted) |
+| Arch Linux (rolling, 2026-05-23) | 7.0.9-arch2-1 | PASS (6416 of 6481 modules blacklisted) |
 
 Note for Rocky/RHEL hosts: on hosts with strict SELinux enforcement,
 non-root execution may encounter a `find` permission denial on

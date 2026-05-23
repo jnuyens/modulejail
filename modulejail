@@ -214,6 +214,28 @@ while [ $# -gt 0 ]; do
             FAIL_ON_MODULE_LOAD=1
             shift
             ;;
+        --dry-run)
+            DRY_RUN=1
+            shift
+            ;;
+        --quiet)
+            QUIET=1
+            shift
+            ;;
+        --verbose)
+            VERBOSE=1
+            shift
+            ;;
+        --output-format)
+            [ $# -ge 2 ] || { printf 'modulejail: error: --output-format requires json or logfmt argument\n' >&2; exit $EX_USAGE; }
+            OUTPUT_FORMAT="$2"
+            shift 2
+            ;;
+        --output-format=*)
+            OUTPUT_FORMAT="${1#*=}"
+            [ -n "$OUTPUT_FORMAT" ] || { printf 'modulejail: error: --output-format= requires non-empty argument (expected json or logfmt)\n' >&2; exit $EX_USAGE; }
+            shift
+            ;;
         -h|--help)
             usage
             exit $EX_OK
@@ -241,8 +263,8 @@ done
 
 # --- Validate profile ---
 case "$profile" in
-    minimal|conservative|desktop) ;;
-    *) printf 'modulejail: error: unknown profile: %s (expected minimal, conservative, desktop)\n' "$profile" >&2; exit $EX_USAGE ;;
+    minimal|conservative|desktop|none) ;;
+    *) printf 'modulejail: error: unknown profile: %s (expected minimal, conservative, desktop, none)\n' "$profile" >&2; exit $EX_USAGE ;;
 esac
 
 # --- Reject contradictory whitelist-file flags ---

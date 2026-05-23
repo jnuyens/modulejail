@@ -275,6 +275,20 @@ if [ -n "$WHITELIST_FILE" ] && [ -n "$NO_WHITELIST_FILE" ]; then
     exit $EX_USAGE
 fi
 
+# --- Reject mutually exclusive verbosity flags ---
+if [ "$QUIET" -eq 1 ] && [ "$VERBOSE" -eq 1 ]; then
+    printf 'modulejail: error: --quiet and --verbose are mutually exclusive\n' >&2
+    exit $EX_USAGE
+fi
+
+# --- Validate --output-format value ---
+if [ -n "$OUTPUT_FORMAT" ]; then
+    case "$OUTPUT_FORMAT" in
+        json|logfmt) ;;
+        *) printf 'modulejail: error: unknown --output-format: %s (expected json or logfmt)\n' "$OUTPUT_FORMAT" >&2; exit $EX_USAGE ;;
+    esac
+fi
+
 # --- Default whitelist file auto-detection ---
 # Per Issue #2 followup (bpmartin20, james-rimu, 2026-05): a default path
 # under /etc/modulejail/ catches the "forgot the flag" silent-error case.

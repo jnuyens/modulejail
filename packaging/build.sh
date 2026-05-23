@@ -24,6 +24,27 @@ if [ -z "$VERSION" ]; then
     exit 1
 fi
 
+# BUILD_DATE: honor SOURCE_DATE_EPOCH per reproducible-builds.org spec.
+# Used to substitute __DATE__ in the manpage's .TH line (IN-04).
+# Falls back to UTC wall-clock if SOURCE_DATE_EPOCH is unset.
+if [ -n "${SOURCE_DATE_EPOCH:-}" ]; then
+    case "$SOURCE_DATE_EPOCH" in
+        ''|*[!0-9]*)
+            printf 'build.sh: error: SOURCE_DATE_EPOCH is set but not a positive integer: %s\n' \
+                "$SOURCE_DATE_EPOCH" >&2
+            exit 1
+            ;;
+    esac
+    # GNU date (Debian/Fedora build hosts): date -u -d "@SDE"
+    # BSD date (macOS dev host): date -u -r SDE
+    # Try GNU form first; fall back to BSD form. One of the two works on every
+    # supported build host. Silent stderr on the failing form (2>/dev/null).
+    BUILD_DATE=$(date -u -d "@$SOURCE_DATE_EPOCH" '+%Y-%m-%d' 2>/dev/null || \
+                 date -u -r "$SOURCE_DATE_EPOCH" '+%Y-%m-%d')
+else
+    BUILD_DATE=$(date -u '+%Y-%m-%d')
+fi
+
 # Parse mode (default: build both).
 want_deb=1
 want_rpm=1
@@ -62,9 +83,9 @@ build_deb() {
     install -m 0644 packaging/debian/copyright  "$work/usr/share/doc/modulejail/copyright"
     install -m 0644 README.md                   "$work/usr/share/doc/modulejail/README.md"
 
-    # Manpage: substitute __VERSION__, then gzip with -n (no name/timestamp)
+    # Manpage: substitute __VERSION__ and __DATE__, then gzip with -n (no name/timestamp)
     # so the .deb is byte-deterministic across rebuilds with identical inputs.
-    sed "s/__VERSION__/$VERSION/g" man/modulejail.8.in > "$work/usr/share/man/man8/modulejail.8"
+    sed -e "s/__VERSION__/$VERSION/g" -e "s/__DATE__/$BUILD_DATE/g" man/modulejail.8.in > "$work/usr/share/man/man8/modulejail.8"
     gzip -9n "$work/usr/share/man/man8/modulejail.8"
 
     out="$DIST/modulejail_${VERSION}_all.deb"
@@ -93,7 +114,7 @@ build_rpm() {
     staging=$(mktemp -d "${TMPDIR:-/tmp}/modulejail-rpm-stage.XXXXXX")
     mkdir -p "$staging/$tardir"
     cp modulejail README.md LICENSE "$staging/$tardir/"
-    sed "s/__VERSION__/$VERSION/g" man/modulejail.8.in > "$staging/$tardir/modulejail.8"
+    sed -e "s/__VERSION__/$VERSION/g" -e "s/__DATE__/$BUILD_DATE/g" man/modulejail.8.in > "$staging/$tardir/modulejail.8"
     tar -czf "$work/SOURCES/$tardir.tar.gz" -C "$staging" "$tardir"
     rm -rf "$staging"
 

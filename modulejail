@@ -302,13 +302,15 @@ fi
 # is a loud error, never a silent skip.
 if [ -z "$WHITELIST_FILE" ] && [ -z "$NO_WHITELIST_FILE" ] && [ -e "$DEFAULT_WHITELIST_FILE" ]; then
     WHITELIST_FILE="$DEFAULT_WHITELIST_FILE"
-    printf 'modulejail: info: using default whitelist file %s (--no-whitelist-file to opt out)\n' "$DEFAULT_WHITELIST_FILE" >&2
+    if [ "$QUIET" -eq 0 ]; then
+        printf 'modulejail: info: using default whitelist file %s (--no-whitelist-file to opt out)\n' "$DEFAULT_WHITELIST_FILE" >&2
+    fi
 fi
 
 # --- -p none sanity-guard-disabled notice ---
 # The >99% blacklist threshold guard is skipped under -p none (D-Phase5-02).
 # Emit an info: line so fleet log scrapers have a parseable breadcrumb.
-if [ "$profile" = "none" ]; then
+if [ "$profile" = "none" ] && [ "$QUIET" -eq 0 ]; then
     printf 'modulejail: info: -p none selected; the >99%% blacklist sanity guard is disabled (the loaded-keep invariant remains the boot-safety contract).\n' >&2
 fi
 
@@ -757,30 +759,33 @@ if [ "$DRY_RUN" -eq 1 ]; then
     # --dry-run: skip mktemp/chmod/mv entirely. Nothing touches $target_dir.
     # The would-be 8-line header brace-group is rerouted to stderr so operators
     # can inspect the header that would have been written without persisting it.
-    # (Plan 05-04 adds the --quiet guard around this block; Plan 05-03 base behavior.)
-    {
-        printf '# modulejail %s\n' "$VERSION"
-        printf '# https://github.com/jnuyens/modulejail\n'
-        printf '# profile: %s\n' "$profile"
-        printf '# kernel: %s\n' "$_kver"
-        printf '# fingerprint: sha256:%s\n' "$fingerprint"
-        if [ -n "$USE_LOGGER" ]; then
-            if [ "$FAIL_ON_MODULE_LOAD" -eq 0 ]; then
-                printf '# install-line: /bin/sh + logger (syslog tag: modulejail)\n'
+    # Under --quiet, the header is silenced entirely (--quiet --dry-run produces
+    # zero output; exit code is the only signal).
+    if [ "$QUIET" -eq 0 ]; then
+        {
+            printf '# modulejail %s\n' "$VERSION"
+            printf '# https://github.com/jnuyens/modulejail\n'
+            printf '# profile: %s\n' "$profile"
+            printf '# kernel: %s\n' "$_kver"
+            printf '# fingerprint: sha256:%s\n' "$fingerprint"
+            if [ -n "$USE_LOGGER" ]; then
+                if [ "$FAIL_ON_MODULE_LOAD" -eq 0 ]; then
+                    printf '# install-line: /bin/sh + logger (syslog tag: modulejail)\n'
+                else
+                    printf '# install-line: /bin/sh + logger + /bin/false (syslog tag: modulejail, --fail-on-module-load)\n'
+                fi
             else
-                printf '# install-line: /bin/sh + logger + /bin/false (syslog tag: modulejail, --fail-on-module-load)\n'
+                if [ "$FAIL_ON_MODULE_LOAD" -eq 0 ]; then
+                    printf '# install-line: /bin/true (silent, --no-syslog-logging or logger absent)\n'
+                else
+                    printf '# install-line: /bin/false (silent, --fail-on-module-load)\n'
+                fi
             fi
-        else
-            if [ "$FAIL_ON_MODULE_LOAD" -eq 0 ]; then
-                printf '# install-line: /bin/true (silent, --no-syslog-logging or logger absent)\n'
-            else
-                printf '# install-line: /bin/false (silent, --fail-on-module-load)\n'
-            fi
-        fi
-        printf '# invocation: %s\n' "$invocation"
-        printf '# Do not edit by hand — regenerate with modulejail(8).\n'
-        emit_install_line "$blacklist"
-    } >&2
+            printf '# invocation: %s\n' "$invocation"
+            printf '# Do not edit by hand — regenerate with modulejail(8).\n'
+            emit_install_line "$blacklist"
+        } >&2
+    fi
 else
     tmp=$(mktemp "${target_dir}/.modulejail-blacklist.conf.XXXXXX") || {
         printf 'modulejail: error: cannot create temp file in %s\n' "$target_dir" >&2
@@ -833,14 +838,16 @@ fi
 # quiet enough not to spam Ansible/Puppet output. Under --dry-run
 # the line is prefixed with 'DRY-RUN: would ' (two extra lexical
 # tokens; fleet aggregators see one extra field at column 2).
-# Plan 05-04 adds the --quiet outer guard; Plan 05-05 adds the
-# --output-format three-way branch on top of this if/else.
-if [ "$DRY_RUN" -eq 1 ]; then
-    printf 'modulejail: DRY-RUN: would blacklist %d of %d modules (profile=%s) -> %s\n' \
-        "$blacklist_count" "$universe_count" "$profile" "$output"
-else
-    printf 'modulejail: blacklisted %d of %d modules (profile=%s) -> %s\n' \
-        "$blacklist_count" "$universe_count" "$profile" "$output"
+# Under --quiet this entire block is silenced; exit code is the only signal.
+# Plan 05-05 adds the --output-format three-way branch on top of this if/else.
+if [ "$QUIET" -eq 0 ]; then
+    if [ "$DRY_RUN" -eq 1 ]; then
+        printf 'modulejail: DRY-RUN: would blacklist %d of %d modules (profile=%s) -> %s\n' \
+            "$blacklist_count" "$universe_count" "$profile" "$output"
+    else
+        printf 'modulejail: blacklisted %d of %d modules (profile=%s) -> %s\n' \
+            "$blacklist_count" "$universe_count" "$profile" "$output"
+    fi
 fi
 
 # === UPDATE CHECK ===
@@ -934,6 +941,8 @@ check_for_updates() {
     return 0
 }
 
-check_for_updates
+if [ "$QUIET" -eq 0 ]; then
+    check_for_updates
+fi
 
 exit $EX_OK

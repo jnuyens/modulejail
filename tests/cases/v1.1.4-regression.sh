@@ -29,27 +29,28 @@ set -eu
 CASE_NAME=v1.1.4-regression
 export CASE_NAME
 
-# Locate repo root and fixture dir relative to this script (so the case
-# runs from any cwd, including via tests/run-fixtures.sh --filter).
-case "${0:-}" in
-    /*) CASE_SCRIPT=$0 ;;
-    *)  CASE_SCRIPT=$(pwd)/$0 ;;
-esac
-CASE_DIR=$(cd "$(dirname "$CASE_SCRIPT")" && pwd)
-REPO_ROOT=$(cd "$CASE_DIR/../.." && pwd)
-MODULEJAIL_BIN=$REPO_ROOT/modulejail
+# Source the shared boilerplate (REPO_ROOT, MODULEJAIL_BIN, CASE_TMP,
+# the centralized EXIT trap, MODULEJAIL_NO_UPDATE_CHECK,
+# MODULEJAIL_DEFAULT_WHITELIST_FILE, case_pass, case_fail). This case
+# builds its own 6474-entry universe inline below from the canned
+# modules-list fixture, with a 2-tier (lo/ + uc/) sharding scheme to
+# survive case-insensitive filesystems, so it does NOT source the
+# small representative-universe builder lib (which would conflict
+# with its own layout).
+# shellcheck source=tests/lib/case-env.sh disable=SC1091
+. "$(dirname "$0")/../lib/case-env.sh"
+
 FIXTURE_DIR=$REPO_ROOT/tests/fixtures/v1.1.4-regression
 
 # Sanity-check the fixture is present.
 for f in proc-modules kver modules-list expected-blacklist.conf; do
     if [ ! -f "$FIXTURE_DIR/$f" ]; then
-        printf '[%s] FAIL: missing fixture file: %s\n' "$CASE_NAME" "$FIXTURE_DIR/$f" >&2
-        exit 1
+        case_fail "missing fixture file: $FIXTURE_DIR/$f"
     fi
 done
 
-CASE_TMP=$(mktemp -d "${TMPDIR:-/tmp}/modulejail-v114-regression.XXXXXX")
-trap 'rm -rf "$CASE_TMP"' EXIT INT HUP TERM
+# CASE_TMP cleanup is handled by the centralized EXIT trap installed
+# in tests/lib/case-env.sh (D-Phase6-15). No inline trap needed here.
 
 # Rebuild the synthetic modules tree from the canned list. All 6474
 # entries in the v1.1.4 fixture use .ko.zst; the list is shipped as-is
@@ -92,12 +93,8 @@ MODULEJAIL_KVER=$KVER \
 MODULEJAIL_PROC_MODULES=$FIXTURE_DIR/proc-modules \
 MODULEJAIL_NO_UPDATE_CHECK=1 \
 MODULEJAIL_DEFAULT_WHITELIST_FILE=$CASE_TMP/default-whitelist-absent.conf \
-"$MODULEJAIL_BIN" -p conservative --no-syslog-logging -o "$ACTUAL" > "$CASE_TMP/stdout" 2> "$CASE_TMP/stderr" || {
-    rc=$?
-    printf '[%s] FAIL: modulejail exited %d (expected 0); stderr=%s\n' \
-        "$CASE_NAME" "$rc" "$(cat "$CASE_TMP/stderr")" >&2
-    exit 1
-}
+"$MODULEJAIL_BIN" -p conservative --no-syslog-logging -o "$ACTUAL" > "$CASE_TMP/stdout" 2> "$CASE_TMP/stderr" || \
+    case_fail "modulejail exited $? (expected 0); stderr=$(cat "$CASE_TMP/stderr")"
 
 # Body-only diff: drop the three legitimately-changed header lines.
 # All other lines (kernel, profile, disclaimer, every install line) must
@@ -110,9 +107,11 @@ grep -v -E '^# modulejail |^# fingerprint:|^# install-line:|^# invocation:' \
     "$ACTUAL" > "$ACTUAL_FILTERED"
 
 if ! diff -u "$EXPECTED_FILTERED" "$ACTUAL_FILTERED" > "$CASE_TMP/diff.out"; then
-    printf '[%s] FAIL: v1.1.4 regression body diverged from reference:\n' "$CASE_NAME" >&2
+    # KEEP the inline diff dump for operator diagnosability - case_fail
+    # cannot render multi-line context. The diff context goes to stderr
+    # BEFORE the case_fail invocation so it appears above the FAIL line.
     head -40 "$CASE_TMP/diff.out" >&2
-    exit 1
+    case_fail "v1.1.4 regression body diverged from reference (see diff above)"
 fi
 
 # Sanity: the expected counts (6363 of 6474) ARE the v1.1.4 reference
@@ -122,9 +121,7 @@ fi
 EXPECTED_COUNT=$(grep -c '^install ' "$FIXTURE_DIR/expected-blacklist.conf")
 ACTUAL_COUNT=$(grep -c '^install ' "$ACTUAL")
 if [ "$EXPECTED_COUNT" != "$ACTUAL_COUNT" ]; then
-    printf '[%s] FAIL: install-line count drift: expected %d got %d\n' \
-        "$CASE_NAME" "$EXPECTED_COUNT" "$ACTUAL_COUNT" >&2
-    exit 1
+    case_fail "install-line count drift: expected $EXPECTED_COUNT got $ACTUAL_COUNT"
 fi
 
 printf '[%s] PASS (%d/%d install lines body-identical to v1.1.4 reference)\n' \

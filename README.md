@@ -133,6 +133,83 @@ To rebuild the packages locally from a checkout:
 Output goes to `packaging/dist/`. The script skips gracefully on hosts
 without the matching tooling.
 
+## Verifying releases
+
+Starting with `v1.3.0`, ModuleJail's release tags are GPG-signed by the
+maintainer (Jasper Nuyens, `jnuyens@linuxbe.com`). Fleet operators who
+deploy via `curl | sh` or pin a specific tag in configuration management
+can verify the signature against the published fingerprint to confirm
+the tarball or script they are about to install is the exact artifact
+the maintainer cut. Earlier tags (`v1.0.0` through `v1.2.4`) are NOT
+signed, and they will not be signed retroactively: the existing tag
+SHAs are immutable references that downstream packagers and AUR
+consumers already trust, and force-pushing rewritten history would
+break those references.
+
+The maintainer's signing-key fingerprint:
+
+```
+<FPR-TO-BE-FILLED-AT-RELEASE-CEREMONY>
+```
+
+The operator fills this value at the v1.3.0 release ceremony per the
+release procedure. The fingerprint is formatted in canonical gpg style:
+10 hex groups of 4 characters, with a double-space between groups 5
+and 6 (matching `gpg --fingerprint` output).
+
+Two ways to import the key:
+
+```sh
+# 1. From GitHub (recommended; GitHub auto-serves the maintainer's
+#    uploaded public keys, no external keyserver required):
+curl https://github.com/jnuyens.gpg | gpg --import
+
+# 2. From a public keyserver (uses gpg's default keyserver pool):
+gpg --recv-keys <FPR-TO-BE-FILLED-AT-RELEASE-CEREMONY>
+```
+
+Then verify the tag:
+
+```sh
+git tag -v v1.3.0
+```
+
+Expected output (literal, adapted from the Pro Git Book reference):
+
+```
+object <commit-sha-of-v1.3.0>
+type commit
+tag v1.3.0
+tagger Jasper Nuyens <jnuyens@linuxbe.com> <unix-ts> +<tz>
+
+v1.3.0 - Operator Flexibility & Release Hardening
+
+gpg: Signature made <date> using RSA key ID <KEYID>
+gpg: Good signature from "Jasper Nuyens <jnuyens@linuxbe.com>"
+Primary key fingerprint: <FPR-TO-BE-FILLED-AT-RELEASE-CEREMONY>
+```
+
+Compare the `Primary key fingerprint:` line against the value documented
+above. A mismatch (or `gpg: BAD signature` / `gpg: no signature found`)
+means the tag must not be trusted: do not install the corresponding
+release on production hosts, and report the discrepancy upstream.
+
+> [!TIP]
+> **Maintainer-only:** to avoid forgetting the `-s` flag at tag-cut
+> time, the project's local `.git/config` should have `tag.gpgsign`
+> set to `true` and `user.signingkey` set to the maintainer's key ID.
+> One-time setup on the maintainer's checkout:
+>
+> ```sh
+> git config tag.gpgsign true
+> git config user.signingkey <KEYID-TO-BE-FILLED>
+> ```
+>
+> From then on, `git tag -a v1.3.1 -m "..."` auto-signs without the
+> explicit `-s` flag. Replace `<KEYID-TO-BE-FILLED>` locally on the
+> maintainer's machine; do NOT commit a real key ID into this README
+> (the placeholder is the published form).
+
 ## What ModuleJail is
 
 ModuleJail snapshots the set of currently loaded modules (`/proc/modules`) and
@@ -174,7 +251,7 @@ it on a partial or in-flux system risks blacklisting a module that is
 occasionally needed.
 
 The generated file is placed under `/etc/modprobe.d/`. To revert, remove the
-file (no reboot needed — see the Reverting section). The built-in baseline
+file (no reboot needed - see the Reverting section). The built-in baseline
 ensures that core filesystems, storage controllers, and essential networking
 modules are never blacklisted regardless of the running profile.
 
@@ -252,7 +329,7 @@ anchors are designed for Ansible template insertion (`lineinfile` or
 
 Since v1.2, ModuleJail reads site-local modules from an external file.
 This is the preferred path when you do not want to (or cannot) edit the
-script in place — for instance because you install ModuleJail via
+script in place - for instance because you install ModuleJail via
 `.deb` / `.rpm` / `curl | sh` and your site-local additions would
 otherwise be lost on the next reinstall.
 
@@ -274,7 +351,7 @@ File format:
 # /etc/modulejail/whitelist.conf
 # One module per line. Blank lines and '#' comments are allowed.
 # Names may be written in either dash or underscore form ("nft-compat"
-# or "nft_compat") — the pipeline normalises - to _.
+# or "nft_compat") - the pipeline normalises - to _.
 # The file mode MUST NOT be group-writable or world-writable
 # (ModuleJail will refuse to run otherwise).
 
@@ -368,10 +445,10 @@ events on hardware hotplug, dependency resolution during
 `modprobe foo`, autoloaded modules through the alias system. It does
 **not** block, by design:
 
-- `insmod /path/to/module.ko` — `insmod` bypasses `modprobe` entirely
+- `insmod /path/to/module.ko` - `insmod` bypasses `modprobe` entirely
   and never reads `modprobe.d/`. A root user with intent can always
   insert a module directly.
-- `modprobe --ignore-install <name>` — `modprobe`'s explicit escape
+- `modprobe --ignore-install <name>` - `modprobe`'s explicit escape
   hatch. The user is opting out of the install-line indirection that
   ModuleJail relies on.
 
@@ -379,7 +456,7 @@ Both are intentional escape hatches in the kernel module loader.
 ModuleJail is a default-safe policy layer: it removes the
 auto-loading attack surface (udev hotplug + dependency resolution),
 which is what an unprivileged or remote attacker has to work with. It
-does not — and could not — prevent a root user with intent from
+does not - and could not - prevent a root user with intent from
 loading anything they want. Treat the blacklist as the "lock the
 front door" tool, not as the "lock the safe" tool.
 
@@ -478,7 +555,7 @@ tree paths. End-user operators leave these unset.
 
 Remove the generated file. The blacklist is consulted by `modprobe` at
 load time, not loaded into the kernel persistently, so removing the file
-takes effect immediately — no reboot needed.
+takes effect immediately - no reboot needed.
 
 ```sh
 # Full revert (instant, no reboot needed):
@@ -496,7 +573,7 @@ attempts* above), which block autoloading via udev events and dependency
 resolution. Explicit `sudo modprobe <name>` invocations override the
 blacklist immediately, regardless of whether the file is still present.
 If the file is still in place, the override applies only to that single
-explicit load — subsequent autoload attempts (from udev or other modules
+explicit load - subsequent autoload attempts (from udev or other modules
 requiring the named module as a dependency) will be blocked again. To
 make the unblock permanent, remove the blacklist file. See *Scope of the
 blacklist* above for the precise list of what `modprobe.d` install

@@ -15,14 +15,36 @@
 #       (glob match). Does NOT run the container matrix. Suitable for
 #       fast iteration on the dev box.
 #
+#   tests/run-fixtures.sh --only-container DISTRO
+#       Restricts execution to a single fixture-tier container; DISTRO
+#       must be one of: arch, alpine, opensuse. Builds
+#       tests/fixtures/$DISTRO/Dockerfile and runs the resulting image.
+#       Does NOT run the host-local case layer or the other two
+#       containers. Intended for CI matrix per-axis invocation so each
+#       CI job exercises exactly one axis with the same harness the
+#       local dev path uses. The `=` form (--only-container=DISTRO) is
+#       equivalent to the space form.
+#
+#   tests/run-fixtures.sh --only-host-local
+#       Runs ONLY the host-local case layer (every tests/cases/*.sh
+#       discovered). Does NOT attempt to build or run any container.
+#       Symmetric with --only-container for the host-local CI axis.
+#
+#   The three flags --filter, --only-container, --only-host-local are
+#   mutually exclusive; passing more than one of them together exits 64.
+#
 # Exit codes:
 #   0   every selected case PASSED.
 #   1   at least one selected case FAILED (in either layer).
-#   64  bad command-line argument (--filter without PATTERN, unknown flag).
-#   77  no container runtime AND no host-local cases discoverable at all
-#       (an impossible state in this repo, but reserved as the autoconf
-#       /TAP skip convention if a future operator runs against an empty
-#       tests/cases/).
+#   64  bad command-line argument: --filter without PATTERN,
+#       --only-container without DISTRO, --only-container DISTRO outside
+#       the allowlist {arch, alpine, opensuse}, more than one of
+#       --filter / --only-container / --only-host-local passed together,
+#       --only-container invoked on a host with neither docker nor podman
+#       in PATH, or any unknown flag.
+#   77  no host-local cases discoverable at all (an impossible state in
+#       this repo, but reserved as the autoconf/TAP skip convention if a
+#       future operator runs against an empty tests/cases/).
 #
 # Pre-fix behaviour: the no-container-runtime path exited 77 without
 # running anything, so the 13+ new host-local cases under tests/cases/
@@ -43,6 +65,8 @@ cd "$REPO_ROOT"
 # use MODULEJAIL_MODULES_ROOT to point modulejail at a writable synthetic
 # tree instead of /lib/modules.
 FILTER=""
+ONLY_CONTAINER=""
+ONLY_HOST_LOCAL=0
 while [ $# -gt 0 ]; do
     case "$1" in
         --filter)
@@ -52,6 +76,19 @@ while [ $# -gt 0 ]; do
             ;;
         --filter=*)
             FILTER=${1#--filter=}
+            shift
+            ;;
+        --only-container)
+            [ $# -ge 2 ] || { printf 'tests/run-fixtures.sh: --only-container requires DISTRO\n' >&2; exit 64; }
+            ONLY_CONTAINER=$2
+            shift 2
+            ;;
+        --only-container=*)
+            ONLY_CONTAINER=${1#--only-container=}
+            shift
+            ;;
+        --only-host-local)
+            ONLY_HOST_LOCAL=1
             shift
             ;;
         --)
@@ -69,6 +106,32 @@ while [ $# -gt 0 ]; do
     esac
 done
 
+# --- Mutex + allowed-DISTRO validation -----------------------------------
+# The three axis-selector flags (--filter, --only-container,
+# --only-host-local) are mutually exclusive. Passing more than one is a
+# bad-arg error (exit 64) - same convention as --filter without PATTERN.
+FLAG_COUNT=0
+[ -n "$FILTER" ]         && FLAG_COUNT=$((FLAG_COUNT + 1))
+[ -n "$ONLY_CONTAINER" ] && FLAG_COUNT=$((FLAG_COUNT + 1))
+[ "$ONLY_HOST_LOCAL" = 1 ] && FLAG_COUNT=$((FLAG_COUNT + 1))
+if [ "$FLAG_COUNT" -gt 1 ]; then
+    printf 'tests/run-fixtures.sh: --filter, --only-container, --only-host-local are mutually exclusive\n' >&2
+    exit 64
+fi
+
+# Allowlist DISTRO so an attacker-controlled value cannot reach the
+# docker invocation (T-06-07). Anything outside {arch, alpine, opensuse}
+# exits 64 BEFORE the dispatch fork.
+if [ -n "$ONLY_CONTAINER" ]; then
+    case "$ONLY_CONTAINER" in
+        arch|alpine|opensuse) ;;
+        *)
+            printf 'tests/run-fixtures.sh: --only-container DISTRO must be one of: arch alpine opensuse\n' >&2
+            exit 64
+            ;;
+    esac
+fi
+
 if [ -n "$FILTER" ]; then
     # Glob discovery; suppress nullglob-style failure to a clear error.
     set +e
@@ -84,6 +147,68 @@ if [ -n "$FILTER" ]; then
     FAIL=0
     TOTAL=0
     for case_file in $matches; do
+        TOTAL=$((TOTAL + 1))
+        printf '\n-- %s --\n' "$case_file"
+        if sh "$case_file"; then
+            : # case prints its own [name] PASS line
+        else
+            FAIL=$((FAIL + 1))
+        fi
+    done
+    if [ "$FAIL" -gt 0 ]; then
+        printf '\nmodulejail tests: %d/%d case(s) FAILED.\n' "$FAIL" "$TOTAL" >&2
+        exit 1
+    fi
+    printf '\nmodulejail tests: %d/%d case(s) PASSED.\n' "$TOTAL" "$TOTAL"
+    exit 0
+fi
+
+# --- Optional --only-container DISTRO mode -------------------------------
+# CI matrix per-axis dispatch. Builds and runs exactly ONE fixture-tier
+# container (arch / alpine / opensuse). Does NOT run the host-local
+# layer or the other two containers. DISTRO has already been validated
+# against the allowlist {arch, alpine, opensuse} above.
+if [ -n "$ONLY_CONTAINER" ]; then
+    if command -v docker >/dev/null 2>&1; then
+        RUNTIME=docker
+    elif command -v podman >/dev/null 2>&1; then
+        RUNTIME=podman
+    else
+        printf 'tests/run-fixtures.sh: --only-container requires docker or podman; neither found in PATH\n' >&2
+        exit 64
+    fi
+    printf 'modulejail tests: container fixture run (only-container=%s)\n' "$ONLY_CONTAINER"
+    img=modulejail-fixture-$ONLY_CONTAINER
+    printf '\n== Building %s fixture ==\n' "$ONLY_CONTAINER"
+    if ! "$RUNTIME" build -f "tests/fixtures/$ONLY_CONTAINER/Dockerfile" -t "$img" .; then
+        printf '[only-container=%s] FAIL (build)\n' "$ONLY_CONTAINER" >&2
+        exit 1
+    fi
+    printf '== Running %s fixture ==\n' "$ONLY_CONTAINER"
+    if "$RUNTIME" run --rm "$img" sh /tests/lib/run-in-fixture.sh "$ONLY_CONTAINER"; then
+        printf '[only-container=%s] PASS\n' "$ONLY_CONTAINER"
+        exit 0
+    fi
+    printf '[only-container=%s] FAIL\n' "$ONLY_CONTAINER" >&2
+    exit 1
+fi
+
+# --- Optional --only-host-local mode -------------------------------------
+# CI matrix host-local-axis dispatch. Runs every tests/cases/*.sh and
+# nothing else. Mirrors the host-local portion of the default-mode flow
+# below; the duplication is acceptable per D-Phase6-06 ("same harness,
+# axis-selected") - the contract is that the same case-discovery loop
+# runs, not that there is a single shared implementation.
+if [ "$ONLY_HOST_LOCAL" = 1 ]; then
+    HOST_CASES=$(ls tests/cases/*.sh 2>/dev/null || true)
+    if [ -z "$HOST_CASES" ]; then
+        printf 'tests/run-fixtures.sh: --only-host-local: no host-local cases under tests/cases/\n' >&2
+        exit 77
+    fi
+    printf 'modulejail tests: host-local case run (only-host-local)\n'
+    FAIL=0
+    TOTAL=0
+    for case_file in $HOST_CASES; do
         TOTAL=$((TOTAL + 1))
         printf '\n-- %s --\n' "$case_file"
         if sh "$case_file"; then

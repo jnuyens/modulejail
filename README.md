@@ -38,7 +38,7 @@ unused modules, specific to your system.
 ## Quickstart
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.2.4/modulejail | sudo sh
+curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.3.0/modulejail | sudo sh
 ```
 
 > **WARNING: convenient, not safe.** This pipes unverified bytes from the
@@ -55,7 +55,7 @@ curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.2.4/modulejai
 > the keep-list unconditionally.
 >
 > ```sh
-> curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.2.4/modulejail | sudo sh -s -- -p desktop
+> curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.3.0/modulejail | sudo sh -s -- -p desktop
 > ```
 >
 > See [Profiles](#profiles) below for the full list.
@@ -64,7 +64,7 @@ The script writes its blacklist to `/etc/modprobe.d/modulejail-blacklist.conf`
 by default. To use a different path:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.2.4/modulejail | sudo sh -s -- -o /etc/modprobe.d/site-blacklist.conf
+curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.3.0/modulejail | sudo sh -s -- -o /etc/modprobe.d/site-blacklist.conf
 ```
 
 ## The safer alternative
@@ -72,7 +72,7 @@ curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.2.4/modulejai
 Download, inspect, then run:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.2.4/modulejail -o /tmp/modulejail
+curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.3.0/modulejail -o /tmp/modulejail
 less /tmp/modulejail
 sudo sh /tmp/modulejail
 ```
@@ -87,11 +87,11 @@ to the GitHub release page:
 
 ```sh
 # Debian / Ubuntu:
-curl -fsSLO https://github.com/jnuyens/modulejail/releases/download/v1.2.4/modulejail_1.2.4_all.deb
+curl -fsSLO https://github.com/jnuyens/modulejail/releases/download/v1.3.0/modulejail_1.3.0_all.deb
 sudo dpkg -i modulejail_1.2.4_all.deb
 
 # RHEL / Fedora / Rocky:
-curl -fsSLO https://github.com/jnuyens/modulejail/releases/download/v1.2.4/modulejail-1.2.4-1.noarch.rpm
+curl -fsSLO https://github.com/jnuyens/modulejail/releases/download/v1.3.0/modulejail-1.3.0-1.noarch.rpm
 sudo rpm -i modulejail-1.2.4-1.noarch.rpm
 ```
 
@@ -136,26 +136,27 @@ without the matching tooling.
 ## Verifying releases
 
 Starting with `v1.3.0`, ModuleJail's release tags are GPG-signed by the
-maintainer (Jasper Nuyens, `jnuyens@linuxbe.com`). Fleet operators who
-deploy via `curl | sh` or pin a specific tag in configuration management
-can verify the signature against the published fingerprint to confirm
-the tarball or script they are about to install is the exact artifact
-the maintainer cut. Earlier tags (`v1.0.0` through `v1.2.4`) are NOT
-signed, and they will not be signed retroactively: the existing tag
-SHAs are immutable references that downstream packagers and AUR
-consumers already trust, and force-pushing rewritten history would
-break those references.
+maintainer (Jasper Nuyens, `jnuyens@linuxbe.com`) using a dedicated
+release-signing key (UID `ModuleJail Releases <jnuyens@linuxbe.com>`).
+Fleet operators who deploy via `curl | sh` or pin a specific tag in
+configuration management can verify the signature against the published
+fingerprint to confirm the tarball or script they are about to install
+is the exact artifact the maintainer cut. Earlier tags (`v1.0.0`
+through `v1.2.4`) are NOT signed, and they will not be signed
+retroactively: the existing tag SHAs are immutable references that
+downstream packagers and AUR consumers already trust, and force-pushing
+rewritten history would break those references.
 
-The maintainer's signing-key fingerprint:
+The release-signing key fingerprint:
 
 ```
-<FPR-TO-BE-FILLED-AT-RELEASE-CEREMONY>
+095F 5C8B 39AF 010E 7B61  5CD4 487B C00D 69C2 A955
 ```
 
-The operator fills this value at the v1.3.0 release ceremony per the
-release procedure. The fingerprint is formatted in canonical gpg style:
-10 hex groups of 4 characters, with a double-space between groups 5
-and 6 (matching `gpg --fingerprint` output).
+(rsa4096, primary signing key, generated 2026-05-24 for the v1.3.0
+release ceremony. Formatted in canonical gpg style: 10 hex groups of
+4 characters, with a double-space between groups 5 and 6, matching
+`gpg --fingerprint` output.)
 
 Two ways to import the key:
 
@@ -165,7 +166,7 @@ Two ways to import the key:
 curl https://github.com/jnuyens.gpg | gpg --import
 
 # 2. From a public keyserver (uses gpg's default keyserver pool):
-gpg --recv-keys <FPR-TO-BE-FILLED-AT-RELEASE-CEREMONY>
+gpg --recv-keys 095F5C8B39AF010E7B615CD4487BC00D69C2A955
 ```
 
 Then verify the tag:
@@ -184,9 +185,9 @@ tagger Jasper Nuyens <jnuyens@linuxbe.com> <unix-ts> +<tz>
 
 v1.3.0 - Operator Flexibility & Release Hardening
 
-gpg: Signature made <date> using RSA key ID <KEYID>
-gpg: Good signature from "Jasper Nuyens <jnuyens@linuxbe.com>"
-Primary key fingerprint: <FPR-TO-BE-FILLED-AT-RELEASE-CEREMONY>
+gpg: Signature made <date> using RSA key 095F5C8B39AF010E7B615CD4487BC00D69C2A955
+gpg: Good signature from "ModuleJail Releases (dedicated release signing key) <jnuyens@linuxbe.com>"
+Primary key fingerprint: 095F 5C8B 39AF 010E 7B61  5CD4 487B C00D 69C2 A955
 ```
 
 Compare the `Primary key fingerprint:` line against the value documented

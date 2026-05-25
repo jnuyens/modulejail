@@ -1,0 +1,25 @@
+[Unit]
+Description=Run ModuleJail after system reaches steady state
+Documentation=https://github.com/jnuyens/modulejail
+After=multi-user.target network-online.target remote-fs.target
+Wants=network-online.target
+ConditionPathExists=/usr/bin/modulejail
+
+[Service]
+Type=oneshot
+
+# Server/VM default profile:
+ExecStart=/usr/bin/modulejail -p conservative
+
+# For desktops/laptops, use this instead:
+# ExecStart=/usr/bin/modulejail -p desktop
+
+# Keep logs in journalctl -u modulejail.service
+StandardOutput=journal
+StandardError=journal
+
+# Prevent accidental repeated starts after success.
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

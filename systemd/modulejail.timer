@@ -1,0 +1,10 @@
+[Unit]
+Description=Run ModuleJail after boot delay
+
+[Timer]
+OnBootSec=5min
+Unit=modulejail.service
+Persistent=false
+
+[Install]
+WantedBy=timers.target

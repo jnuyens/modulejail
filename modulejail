@@ -72,7 +72,7 @@ BASELINE_CONSERVATIVE="$BASELINE_MINIMAL virtio virtio_ring virtio_pci virtio_bl
 # misc desktop peripherals, and webcam/video4linux.
 # Intent: "Laptop or workstation — won't break WiFi, BT, audio, or video."
 # shellcheck disable=SC2034  # referenced indirectly via the profile case statement
-BASELINE_DESKTOP="$BASELINE_CONSERVATIVE drm drm_kms_helper i915 amdgpu radeon nouveau nvidia ttm video backlight cfg80211 mac80211 iwlwifi iwlmvm iwldvm ath9k ath10k_core ath10k_pci ath11k brcmfmac brcmsmac rtw88_core rtw89_core rtl8xxxu bluetooth btusb btintel btrtl btbcm hci_uart snd snd_pcm snd_timer snd_hda_intel snd_hda_codec snd_hda_codec_realtek snd_hda_codec_hdmi snd_hda_codec_generic snd_usb_audio snd_seq xhci_hcd xhci_pci ehci_hcd ehci_pci uhci_hcd usblp cdc_acm joydev evdev videodev uvcvideo media"
+BASELINE_DESKTOP="$BASELINE_CONSERVATIVE drm drm_kms_helper i915 amdgpu radeon nouveau nvidia ttm video backlight cfg80211 mac80211 iwlwifi iwlmvm iwldvm ath9k ath10k_core ath10k_pci ath11k brcmfmac brcmsmac rtw88_core rtw89_core rtl8xxxu bluetooth btusb btintel btrtl btbcm hci_uart snd snd_pcm snd_timer snd_hda_intel snd_hda_codec snd_hda_codec_realtek snd_hda_codec_hdmi snd_hda_codec_generic snd_usb_audio snd_seq xhci_hcd xhci_pci ehci_hcd ehci_pci uhci_hcd usblp cdc_acm joydev evdev videodev uvcvideo media exfat"
 
 # === SYSADMIN WHITELIST ===
 # Site-local additions to the keep-set, in addition to the selected baseline

@@ -534,12 +534,16 @@ enforcement, `kernel.modules_disabled=1`).
 
 | Option | Description |
 |--------|-------------|
-| `-p`, `--profile {minimal\|conservative\|desktop}` | Built-in baseline profile (default: `conservative`) |
+| `-p`, `--profile {minimal\|conservative\|desktop\|none}` | Built-in baseline profile (default: `conservative`). `none` carries no built-in baseline at all - only currently-loaded modules and any `--whitelist-file` entries are preserved. Recommended only when an explicit `--whitelist-file` is supplied (since v1.3) |
 | `-o`, `--output PATH` | Output path for the generated blacklist file (default: `/etc/modprobe.d/modulejail-blacklist.conf`) |
 | `--whitelist-file PATH` | Append module names from PATH to the keep-set. One module per line; `#` starts a comment. File must not be group- or world-writable. Default: `/etc/modulejail/whitelist.conf` |
 | `--no-whitelist-file` | Skip the default whitelist file even if present. Mutually exclusive with `--whitelist-file PATH` |
 | `--no-syslog-logging` | Force `/bin/true` install lines (v1.1.4 behavior). By default, blocked module loads are logged to syslog with tag `modulejail` |
 | `-f`, `--fail-on-module-load` | Blocked module loads return a non-zero exit code (`modprobe` fails loudly). Default: blocked loads silently succeed |
+| `--dry-run` | Compute the would-be blacklist and print a summary to stdout; do NOT write the output file or touch `/etc/modprobe.d/`. Header is rerouted to stderr. Exit code is `0` on simulated success (since v1.3) |
+| `--quiet` | Suppress all non-error stderr output (info lines, summary, header echo). Errors still surface. Mutually exclusive with `--verbose` (since v1.3) |
+| `--verbose` | Emit per-module decision lines on stderr (which module was kept, which was blacklisted, and why). Mutually exclusive with `--quiet` (since v1.3) |
+| `--output-format {json\|logfmt}` | Emit a machine-readable run summary to stdout instead of the default human-readable summary. JSON round-trips through `jq`; logfmt round-trips through standard logfmt parsers. 11-field schema v1 (`kernel_version`, `modules_available`, `modules_loaded`, `modules_blacklisted`, `fingerprint`, `output_path`, ...). Survives `--quiet` (since v1.3) |
 | `-V`, `--version` | Show program version and exit |
 | `-h`, `--help` | Show help text and exit |
 

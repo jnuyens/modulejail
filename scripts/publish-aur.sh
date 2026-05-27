@@ -44,6 +44,7 @@ set -eu
 REPO_ROOT=$(cd "$(dirname "$0")/.." && pwd)
 PKGBUILD=$REPO_ROOT/packaging/aur/PKGBUILD
 LICENSE=$REPO_ROOT/packaging/aur/LICENSE
+SIGNING_KEY=$REPO_ROOT/packaging/aur/modulejail-signing-key.gpg
 REMOTE_BUILD_HOST=${REMOTE_BUILD_HOST:-archbox}
 AUR_PUBLISH_DIR=${AUR_PUBLISH_DIR:-/tmp/aur-modulejail-publish}
 
@@ -140,12 +141,17 @@ else
     git -C "$AUR_PUBLISH_DIR" reset --quiet --hard origin/master
 fi
 
-cp "$PKGBUILD"   "$AUR_PUBLISH_DIR/PKGBUILD"
-cp "$LICENSE"    "$AUR_PUBLISH_DIR/LICENSE"
+cp "$PKGBUILD"    "$AUR_PUBLISH_DIR/PKGBUILD"
+cp "$LICENSE"     "$AUR_PUBLISH_DIR/LICENSE"
+cp "$SIGNING_KEY" "$AUR_PUBLISH_DIR/modulejail-signing-key.gpg"
 cp "$SRCINFO_TMP" "$AUR_PUBLISH_DIR/.SRCINFO"
 rm -f "$SRCINFO_TMP"
 
-git -C "$AUR_PUBLISH_DIR" add PKGBUILD LICENSE .SRCINFO
+# Remove the previous-pkgrel .asc filename if it lingers from an older clone.
+git -C "$AUR_PUBLISH_DIR" rm --quiet --cached --ignore-unmatch modulejail-signing-key.asc 2>/dev/null || true
+rm -f "$AUR_PUBLISH_DIR/modulejail-signing-key.asc"
+
+git -C "$AUR_PUBLISH_DIR" add PKGBUILD LICENSE modulejail-signing-key.gpg .SRCINFO
 
 if git -C "$AUR_PUBLISH_DIR" diff --staged --quiet; then
     echo "publish-aur.sh: no changes vs AUR HEAD; nothing to push."

@@ -15,7 +15,7 @@ export LC_ALL
 # --- Tool version + sysexits.h exit code constants ---
 # VERSION is the single source of truth for both --version and the
 # generated blacklist header. Bump on every release per SemVer.
-VERSION='1.3.0'
+VERSION='1.3.1'
 EX_OK=0
 # sysexits.h conventional codes (see man 3 sysexits):
 #   64=usage 65=dataerr 66=noinput 70=software 71=oserr 73=cantcreat 77=noperm
@@ -72,7 +72,7 @@ BASELINE_CONSERVATIVE="$BASELINE_MINIMAL virtio virtio_ring virtio_pci virtio_bl
 # misc desktop peripherals, and webcam/video4linux.
 # Intent: "Laptop or workstation — won't break WiFi, BT, audio, or video."
 # shellcheck disable=SC2034  # referenced indirectly via the profile case statement
-BASELINE_DESKTOP="$BASELINE_CONSERVATIVE drm drm_kms_helper i915 amdgpu radeon nouveau nvidia ttm video backlight cfg80211 mac80211 iwlwifi iwlmvm iwldvm ath9k ath10k_core ath10k_pci ath11k brcmfmac brcmsmac rtw88_core rtw89_core rtl8xxxu bluetooth btusb btintel btrtl btbcm hci_uart snd snd_pcm snd_timer snd_hda_intel snd_hda_codec snd_hda_codec_realtek snd_hda_codec_hdmi snd_hda_codec_generic snd_usb_audio snd_seq xhci_hcd xhci_pci ehci_hcd ehci_pci uhci_hcd usblp cdc_acm joydev evdev videodev uvcvideo media"
+BASELINE_DESKTOP="$BASELINE_CONSERVATIVE drm drm_kms_helper i915 amdgpu radeon nouveau nvidia ttm video backlight cfg80211 mac80211 iwlwifi iwlmvm iwldvm ath9k ath10k_core ath10k_pci ath11k brcmfmac brcmsmac rtw88_core rtw89_core rtl8xxxu bluetooth btusb btintel btrtl btbcm hci_uart snd snd_pcm snd_timer snd_hda_intel snd_hda_codec snd_hda_codec_realtek snd_hda_codec_hdmi snd_hda_codec_generic snd_usb_audio snd_seq xhci_hcd xhci_pci ehci_hcd ehci_pci uhci_hcd usblp cdc_acm joydev evdev videodev uvcvideo media exfat"
 
 # === SYSADMIN WHITELIST ===
 # Site-local additions to the keep-set, in addition to the selected baseline
@@ -96,7 +96,7 @@ usage() {
     printf 'Usage: modulejail [OPTIONS]\n'
     printf '\n'
     printf 'Options:\n'
-    printf '  -p, --profile {minimal|conservative|desktop}\n'
+    printf '  -p, --profile {minimal|conservative|desktop|none}\n'
     printf '                    Built-in baseline profile (default: conservative)\n'
     printf '  -o, --output PATH Output path for the generated blacklist file\n'
     printf '                    (default: /etc/modprobe.d/modulejail-blacklist.conf)\n'
@@ -117,6 +117,18 @@ usage() {
     printf '                    Blocked module loads return a non-zero exit code\n'
     printf '                    (modprobe fails loudly). Default: blocked loads\n'
     printf '                    silently succeed (modprobe returns 0).\n'
+    printf '  --dry-run         Compute the would-be blacklist and print a summary to\n'
+    printf '                    stdout; do NOT write the output file or touch\n'
+    printf '                    /etc/modprobe.d/. Header is rerouted to stderr.\n'
+    printf '  --quiet           Suppress all non-error stderr (info lines, summary,\n'
+    printf '                    header). Mutually exclusive with --verbose.\n'
+    printf '  --verbose         Emit per-module decision lines on stderr. Mutually\n'
+    printf '                    exclusive with --quiet.\n'
+    printf '  --output-format {json|logfmt}\n'
+    printf '                    Emit a machine-readable run summary to stdout instead\n'
+    printf '                    of the default human-readable form. JSON round-trips\n'
+    printf '                    through jq; logfmt round-trips through standard\n'
+    printf '                    logfmt parsers. Survives --quiet.\n'
     printf '  -V, --version     Show program version and exit\n'
     printf '  -h, --help        Show this help text and exit\n'
     printf '\n'
@@ -124,6 +136,9 @@ usage() {
     printf '  minimal       Core filesystems + essential kernel modules only\n'
     printf '  conservative  Minimal + common server/VM drivers (default)\n'
     printf '  desktop       Conservative + WiFi, Bluetooth, audio, video drivers\n'
+    printf '  none          No built-in baseline; only currently-loaded modules\n'
+    printf '                and any --whitelist-file entries are preserved.\n'
+    printf '                Recommended only with an explicit --whitelist-file.\n'
     printf '\n'
     printf 'Defaults:\n'
     printf '  profile:        conservative\n'

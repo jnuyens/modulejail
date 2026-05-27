@@ -35,10 +35,41 @@ shell script, run once on a steady-state host, that writes
 `/etc/modprobe.d/modulejail-blacklist.conf` to blacklist the thousands of
 unused modules, specific to your system.
 
+## Threat model
+
+ModuleJail defends against one thing: **unprivileged-user → root privilege
+escalation via vulnerable kernel modules**. The threat actor is a local
+user (or a compromised non-root service) who would otherwise trigger
+automatic loading of a vulnerable module via an ordinary syscall -
+`socket(AF_VSOCK, ...)`, `socket(AF_ALG, ...)`, `execve()` of a binary
+with an obscure binfmt magic, opening a device node, and so on. The
+recent "Copy Fail" CVE (CVE-2026-31431, April 2026, root via
+`algif_aead`) is exactly this pattern, and the upstream mitigation every
+advisory recommends - `install algif_aead /bin/false` in
+`/etc/modprobe.d/` - is one line of what ModuleJail generates
+automatically, applied to the entire class of unused modules.
+
+ModuleJail does **not** defend against attackers who already have root.
+Root can `insmod /path/to/module.ko` directly, bypassing `modprobe`
+entirely and never consulting `modprobe.d/`. Root can also
+`modprobe --ignore-install <name>` to skip the install-line indirection.
+Both are intentional kernel escape hatches for root. If your threat
+model includes a malicious root user, you need different tools: Secure
+Boot + kernel lockdown mode, module signature enforcement, IMA/EVM, or
+`kernel.modules_disabled=1` after boot settles.
+
+For the full taxonomy of what unprivileged users can trigger, and
+recipes for stacking other kernel hardening on top, see
+**[docs/DEFENSE-IN-DEPTH.md](docs/DEFENSE-IN-DEPTH.md)**.
+
+Treat ModuleJail as the "lock the front door" tool. It is the cheapest,
+broadest, lowest-blast-radius layer in a kernel-hardening stack -
+deploy it first; the deeper recipes compose on top.
+
 ## Quickstart
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.3.0/modulejail | sudo sh
+curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.3.1/modulejail | sudo sh
 ```
 
 > **WARNING: convenient, not safe.** This pipes unverified bytes from the
@@ -55,7 +86,7 @@ curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.3.0/modulejai
 > the keep-list unconditionally.
 >
 > ```sh
-> curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.3.0/modulejail | sudo sh -s -- -p desktop
+> curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.3.1/modulejail | sudo sh -s -- -p desktop
 > ```
 >
 > See [Profiles](#profiles) below for the full list.
@@ -64,7 +95,7 @@ The script writes its blacklist to `/etc/modprobe.d/modulejail-blacklist.conf`
 by default. To use a different path:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.3.0/modulejail | sudo sh -s -- -o /etc/modprobe.d/site-blacklist.conf
+curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.3.1/modulejail | sudo sh -s -- -o /etc/modprobe.d/site-blacklist.conf
 ```
 
 ## The safer alternative
@@ -72,7 +103,7 @@ curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.3.0/modulejai
 Download, inspect, then run:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.3.0/modulejail -o /tmp/modulejail
+curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.3.1/modulejail -o /tmp/modulejail
 less /tmp/modulejail
 sudo sh /tmp/modulejail
 ```
@@ -87,12 +118,12 @@ to the GitHub release page:
 
 ```sh
 # Debian / Ubuntu:
-curl -fsSLO https://github.com/jnuyens/modulejail/releases/download/v1.3.0/modulejail_1.3.0_all.deb
-sudo dpkg -i modulejail_1.2.4_all.deb
+curl -fsSLO https://github.com/jnuyens/modulejail/releases/download/v1.3.1/modulejail_1.3.1_all.deb
+sudo dpkg -i modulejail_1.3.1_all.deb
 
 # RHEL / Fedora / Rocky:
-curl -fsSLO https://github.com/jnuyens/modulejail/releases/download/v1.3.0/modulejail-1.3.0-1.noarch.rpm
-sudo rpm -i modulejail-1.2.4-1.noarch.rpm
+curl -fsSLO https://github.com/jnuyens/modulejail/releases/download/v1.3.1/modulejail-1.3.1-1.noarch.rpm
+sudo rpm -i modulejail-1.3.1-1.noarch.rpm
 ```
 
 For Arch Linux and derivatives (Manjaro, EndeavourOS, ...), modulejail is
@@ -439,6 +470,41 @@ was not set, ModuleJail silently falls back to the `/bin/true` form
 (matching the v1.1.4 behaviour on minimal hosts). No stderr warning is
 emitted; the header annotation is the only visible cue.
 
+## Failing on blocked module loads (`-f` / `--fail-on-module-load`)
+
+By default, blacklisted module loads succeed silently: the generated
+install lines end with `exit 0` (when logger is present) or `/bin/true`
+(when it is not), so `modprobe <module>` returns 0 even though the module
+was not actually loaded. This is the safe default — it prevents
+breakage in scripts and services that unconditionally call `modprobe`
+and check its return code.
+
+To make blocked loads fail loudly instead, pass `-f` or
+`--fail-on-module-load`:
+
+```sh
+sudo modulejail -f
+sudo modulejail --fail-on-module-load
+```
+
+With this flag, the install-line body uses `/bin/false` instead of
+`exit 0` or `/bin/true`, so `modprobe <module>` returns a non-zero exit
+code for blacklisted modules. This is useful when you want tooling to
+detect and alert on blocked module attempts rather than silently
+swallowing them.
+
+The header annotation reflects the mode:
+
+```
+# install-line: /bin/sh + logger + /bin/false (syslog tag: modulejail, --fail-on-module-load)
+```
+
+or, without logger:
+
+```
+# install-line: /bin/false (silent, --fail-on-module-load)
+```
+
 ## Scope of the blacklist (what it blocks, what it doesn't)
 
 A `modprobe.d` blacklist blocks **automatic** module loading: udev
@@ -458,8 +524,36 @@ ModuleJail is a default-safe policy layer: it removes the
 auto-loading attack surface (udev hotplug + dependency resolution),
 which is what an unprivileged or remote attacker has to work with. It
 does not - and could not - prevent a root user with intent from
-loading anything they want. Treat the blacklist as the "lock the
-front door" tool, not as the "lock the safe" tool.
+loading anything they want. See the [Threat model](#threat-model)
+section above for the full framing, and
+[docs/DEFENSE-IN-DEPTH.md](docs/DEFENSE-IN-DEPTH.md) for recipes that
+close the root-with-intent gap (kernel lockdown mode, module signature
+enforcement, `kernel.modules_disabled=1`).
+
+## Options reference
+
+| Option | Description |
+|--------|-------------|
+| `-p`, `--profile {minimal\|conservative\|desktop\|none}` | Built-in baseline profile (default: `conservative`). `none` carries no built-in baseline at all - only currently-loaded modules and any `--whitelist-file` entries are preserved. Recommended only when an explicit `--whitelist-file` is supplied (since v1.3) |
+| `-o`, `--output PATH` | Output path for the generated blacklist file (default: `/etc/modprobe.d/modulejail-blacklist.conf`) |
+| `--whitelist-file PATH` | Append module names from PATH to the keep-set. One module per line; `#` starts a comment. File must not be group- or world-writable. Default: `/etc/modulejail/whitelist.conf` |
+| `--no-whitelist-file` | Skip the default whitelist file even if present. Mutually exclusive with `--whitelist-file PATH` |
+| `--no-syslog-logging` | Force `/bin/true` install lines (v1.1.4 behavior). By default, blocked module loads are logged to syslog with tag `modulejail` |
+| `-f`, `--fail-on-module-load` | Blocked module loads return a non-zero exit code (`modprobe` fails loudly). Default: blocked loads silently succeed |
+| `--dry-run` | Compute the would-be blacklist and print a summary to stdout; do NOT write the output file or touch `/etc/modprobe.d/`. Header is rerouted to stderr. Exit code is `0` on simulated success (since v1.3) |
+| `--quiet` | Suppress all non-error stderr output (info lines, summary, header echo). Errors still surface. Mutually exclusive with `--verbose` (since v1.3) |
+| `--verbose` | Emit per-module decision lines on stderr (which module was kept, which was blacklisted, and why). Mutually exclusive with `--quiet` (since v1.3) |
+| `--output-format {json\|logfmt}` | Emit a machine-readable run summary to stdout instead of the default human-readable summary. JSON round-trips through `jq`; logfmt round-trips through standard logfmt parsers. 11-field schema v1 (`kernel_version`, `modules_available`, `modules_loaded`, `modules_blacklisted`, `fingerprint`, `output_path`, ...). Survives `--quiet` (since v1.3) |
+| `-V`, `--version` | Show program version and exit |
+| `-h`, `--help` | Show help text and exit |
+
+Environment variables:
+
+| Variable | Description |
+|----------|-------------|
+| `MODULEJAIL_NO_UPDATE_CHECK` | Set to any non-empty value to skip the post-run update check |
+| `MODULEJAIL_LOGGER_PATH` | Path to the logger binary for syslog install-line detection (default: `/usr/bin/logger`) |
+| `MODULEJAIL_DEFAULT_WHITELIST_FILE` | Override the auto-detected whitelist path (default: `/etc/modulejail/whitelist.conf`) |
 
 ## Exit codes
 

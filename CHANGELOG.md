@@ -5,6 +5,95 @@ All notable changes to ModuleJail are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] - 2026-05-27
+
+Documentation-heavy patch release. One small additive baseline change
+(exfat in DESKTOP), one new operator-recipe example, two external doc
+contributions, and a substantial new threat-model + defense-in-depth
+documentation surface. No flag changes; no behavior changes outside
+the DESKTOP profile keep-set. v1.1.4 byte-identical install-line body
+still preserved (6363 / 6363 install lines).
+
+### Added
+
+- `exfat` in `BASELINE_DESKTOP`. Windows-formatted flash drives and SD
+  cards above 32 GB default to exFAT; without this addition, plugging
+  a Windows-formatted USB drive into a desktop-profile host after a
+  ModuleJail run could fail to mount. Additive only; no module is
+  blacklisted that wasn't already. Contributed by @tjmnmk in
+  [PR #13](https://github.com/jnuyens/modulejail/pull/13).
+- `examples/blocked-module-popup.sh`: a small desktop-session script
+  that tails `journalctl -t modulejail` and fires `notify-send` for
+  each blocked module load. Ships under `examples/` because it is a
+  separate operator-launched recipe, not a ModuleJail feature (a
+  longer-running popup tail would cross the v1 "no daemons" line; the
+  v2.0-alpha "Managed Mode" roadmap covers the eventual built-in
+  version). Contributed by @teou1 in
+  [issue #12](https://github.com/jnuyens/modulejail/issues/12).
+- New top-level `## Threat model` section in `README.md` making the
+  scope explicit: ModuleJail defends against unprivileged-user → root
+  privilege escalation via vulnerable kernel modules, and does **not**
+  defend against attackers who already have root (root can `insmod`
+  directly, bypassing `modprobe.d/` entirely). Cites the May 2026
+  "Copy Fail" CVE (CVE-2026-31431, `algif_aead`) as the canonical
+  threat-model fit.
+- New `docs/DEFENSE-IN-DEPTH.md` with a 7-tier taxonomy of which
+  kernel modules unprivileged users can autoload (socket families,
+  AF_ALG crypto, FUSE setuid mount helpers, binfmt, char-devices,
+  netlink, user-namespace amplifier) and 5 stand-alone hardening
+  recipes that compose with ModuleJail (`kernel.modules_disabled=1`,
+  disable unprivileged user namespaces, Secure Boot + lockdown mode,
+  module signature enforcement, seccomp per service). Each recipe
+  lists who it protects against, how to apply, and what breaks.
+- New `## Failing on blocked module loads` section in `README.md`
+  plus a full `-f` / `--fail-on-module-load` entry in the manpage
+  SYNOPSIS and OPTIONS. The v1.2.3 `-f` flag existed but was
+  undocumented. Contributed by @tjmnmk in
+  [PR #14](https://github.com/jnuyens/modulejail/pull/14).
+- New `## Options reference` table in `README.md` covering every
+  flag plus the three `MODULEJAIL_*` environment variables.
+  Contributed by @tjmnmk in
+  [PR #14](https://github.com/jnuyens/modulejail/pull/14).
+
+### Changed
+
+- In-script `usage()` text extended to document the v1.3.0 flags that
+  were added on the manpage side but missed in `--help`:
+  `--dry-run`, `--quiet`, `--verbose`, `--output-format {json|logfmt}`,
+  and the `-p none` profile arm. `modulejail --help`, the `README.md`
+  options table, and the manpage are now in parity.
+- README `## Scope of the blacklist (what it blocks, what it doesn't)`
+  section now cross-references the new top-level `## Threat model` +
+  `docs/DEFENSE-IN-DEPTH.md` instead of duplicating the framing inline.
+- Manpage `HEADER FIELDS` section: minor prose cleanup of the
+  `# kernel:` line description; behavior unchanged.
+- README native-package install snippets: stale `1.2.4` filename
+  references in the `dpkg -i` / `rpm -i` lines (left over from the
+  v1.3.0 release URL bump) are now consistent with the download URL.
+
+### Internal
+
+- AUR `modulejail` PKGBUILD switched to sequoia-sqv signature
+  verification. New `prepare()` invokes `sqv` against a pinned
+  `modulejail-signing-key.gpg` shipped in the AUR repo; local source
+  filenames use non-trigger extensions (`.tarball-signature`, `.gpg`)
+  so `makepkg`'s built-in gpg verifier does not compete. Published as
+  AUR `modulejail 1.3.0-2` on 2026-05-25 ahead of this release (no
+  upstream code change in that pkgrel). The v1.3.0 GitHub release now
+  carries `v1.3.0.tar.gz.sig` as a third asset alongside the .deb and
+  .rpm. Per AUR comment from @Velocifyer (2026-05-24): "use sqv, not
+  gpg."
+
+### Credit
+
+- @teou1 for [issue #12](https://github.com/jnuyens/modulejail/issues/12)
+  (the popup-script contribution and a wiki HOWTO on the Manjaro
+  forum at https://forum.manjaro.org/t/howto-modulejail/187877,
+  authored by @andreas85).
+- @tjmnmk (Adam Bambuch) for PRs #13 and #14, and for picking up
+  co-maintainership coordination on AUR `modulejail-git`.
+- @Velocifyer for the AUR comment that drove the sequoia-sqv switch.
+
 ## [1.3.0] - 2026-05-24
 
 Operator-flexibility CLI surface (four new flags, one new profile, one

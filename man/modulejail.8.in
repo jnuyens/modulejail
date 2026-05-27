@@ -20,6 +20,7 @@ modulejail \- shrink a Linux host's kernel-module attack surface
 .RB [ \-\-no\-syslog\-logging ]
 .RB [ \-\-dry\-run ]
 .RB [ \-\-quiet | \-\-verbose ]
+.RB [ \-f ]
 .RB [ \-\-output\-format
 .IR format ]
 .br
@@ -247,6 +248,25 @@ field becomes
 and
 .B output_path
 is the would-be path; no file is written). Available since v1.3.
+.TP
+.BR \-f ", " \-\-fail\-on\-module\-load
+Make blocked module loads return a non-zero exit code so that
+.B modprobe
+fails loudly for blacklisted modules. By default, blocked loads
+silently succeed
+.RB ( modprobe
+returns 0 even though the module was not loaded). With this flag,
+the install-line body uses
+.B /bin/false
+instead of
+.B "exit 0"
+or
+.BR /bin/true ,
+so
+.B modprobe <module>
+returns non-zero for any blacklisted module. Use this when
+blocked loads should produce a visible error rather than silently
+succeeding.
 .TP
 .BR \-V ", " \-\-version
 Print version, repository URL, and license, then exit
@@ -552,9 +572,9 @@ above.
 .B "# Do not edit by hand -- regenerate with modulejail(8)."
 Disclaimer. Edits are overwritten on the next run.
 .PP
-This section satisfies the HDR-01 documentation requirement. The
+The
 .B # kernel:
-line is the regression-lock target: test suite fixture
+line is regression-locked: test suite fixture
 .I header-kernel-line-locked.sh
 asserts that this line exists and carries a non-empty kernel-version
 token in every generated file. See

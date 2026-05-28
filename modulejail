@@ -15,7 +15,7 @@ export LC_ALL
 # --- Tool version + sysexits.h exit code constants ---
 # VERSION is the single source of truth for both --version and the
 # generated blacklist header. Bump on every release per SemVer.
-VERSION='1.3.3'
+VERSION='1.5.0-beta.1'
 EX_OK=0
 # sysexits.h conventional codes (see man 3 sysexits):
 #   64=usage 65=dataerr 66=noinput 70=software 71=oserr 73=cantcreat 77=noperm

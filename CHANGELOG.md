@@ -5,6 +5,64 @@ All notable changes to ModuleJail are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0-beta.1] - 2026-05-29
+
+Pre-release. First beta of the v1.5 systemd integration milestone:
+operators installing the `.deb` or `.rpm` now get an optional
+`modulejail.timer` unit that runs `modulejail -p conservative` five
+minutes after boot. Disabled on install (postinst prints the enable
+instruction); curl|sh users and AUR `modulejail` (stable) users are
+unaffected.
+
+**Beta status:** intended for early testers on Debian/Ubuntu and
+RHEL/Fedora/Rocky. Production operators should stay on v1.3.3
+(stable) until v1.5.0 final ships.
+
+### Added
+
+- `systemd/modulejail.service` - `Type=oneshot` unit that runs
+  `/usr/bin/modulejail -p conservative` once. Sequenced after
+  `multi-user.target` + `network-online.target` + `remote-fs.target`
+  so the host is in steady state when modulejail snapshots
+  `/proc/modules`. `RemainAfterExit=yes` keeps the unit visible as
+  "active" until reboot for operator diagnosability.
+- `systemd/modulejail.timer` - `OnBootSec=5min`, `Persistent=false`
+  (missed runs are not replayed). Targets `modulejail.service`.
+- `.deb` postinst and `.rpm` `%post` install the unit files into
+  `/usr/lib/systemd/system/`, run `systemctl daemon-reload`, and
+  print the `systemctl enable modulejail.timer` command. **Neither
+  enables the timer.** `.rpm` `%postun` runs `daemon-reload` on
+  removal.
+
+### Notes
+
+- **Profile choice:** the unit defaults to `-p conservative` (server
+  / VM). Desktop operators should `systemctl edit
+  modulejail.service` and override `ExecStart=` to use `-p desktop`,
+  which survives package upgrades via the drop-in mechanism.
+- **No new Depends:** the `.deb` `control` and `.rpm` spec dependency
+  lists are unchanged. The `modulejail` script itself doesn't gain
+  systemd as a runtime dependency - the units just sit there
+  unenabled on non-systemd hosts.
+- **Out of scope for v1.5 (these belong to a future v2.0-alpha):**
+  auto-enabling on install, a dedicated `/var/log/modulejail.log`,
+  any `dmesg`/audit watcher, GUI notifications, package `Depends:`
+  expansion.
+
+### Credit
+
+- @gbkersey (Bo Kersey) in
+  [PR #15](https://github.com/jnuyens/modulejail/pull/15) for the
+  full implementation. Bo had built this for his own use and
+  contributed back upstream.
+
+### Cosmetic follow-ups by upstream
+
+- Added trailing newline to `systemd/modulejail.service` (POSIX
+  text-file convention).
+- Replaced tab indentation with spaces in one `packaging/build.sh`
+  mkdir line for consistency with the surrounding spaces.
+
 ## [1.3.3] - 2026-05-29
 
 Hotfix release. The v1.3.2 baseline additions (this morning) broke

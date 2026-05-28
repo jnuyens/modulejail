@@ -76,7 +76,7 @@ build_deb() {
              "$work/usr/bin" \
              "$work/usr/share/doc/modulejail" \
              "$work/usr/share/man/man8" \
-	     "$work/usr/lib/systemd/system"
+             "$work/usr/lib/systemd/system"
 
     sed "s/__VERSION__/$VERSION/g" packaging/debian/control.in > "$work/DEBIAN/control"
 

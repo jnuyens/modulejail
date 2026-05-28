@@ -17,6 +17,22 @@
 # All other lines (kernel, profile, disclaimer, every install line) MUST
 # match exactly.
 #
+# Contract scope (clarified 2026-05-29 during the v1.3.3 fix):
+# This case asserts that the install-line RENDERING (the per-line
+# `install <name> /bin/true` form with the `--no-syslog-logging`
+# body) stays byte-identical across releases. It does NOT freeze the
+# SET of modules that appear in the blacklist: every intentional
+# addition to BASELINE_CONSERVATIVE moves a module from "blacklisted"
+# to "kept", which changes which install lines appear in the output.
+# When that happens, the expected reference fixture is updated in the
+# same commit as the baseline change, and the test continues to
+# enforce the rendering contract.
+#
+# The current fixture reflects the v1.3.3 baseline (6360 install
+# lines); the v1.1.4 original was 6363 lines (three modules -
+# inet_diag, tcp_diag, udp_diag - moved into BASELINE_CONSERVATIVE
+# in v1.3.2).
+#
 # The fixture's universe is rebuilt from tests/fixtures/v1.1.4-regression/
 # modules-list (6474 basenames). The case builds a synthetic /lib/modules/
 # tree of empty files matching those basenames under $CASE_TMP and points

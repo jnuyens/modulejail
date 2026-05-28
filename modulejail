@@ -15,7 +15,7 @@ export LC_ALL
 # --- Tool version + sysexits.h exit code constants ---
 # VERSION is the single source of truth for both --version and the
 # generated blacklist header. Bump on every release per SemVer.
-VERSION='1.3.1'
+VERSION='1.3.3'
 EX_OK=0
 # sysexits.h conventional codes (see man 3 sysexits):
 #   64=usage 65=dataerr 66=noinput 70=software 71=oserr 73=cantcreat 77=noperm
@@ -61,18 +61,20 @@ DEFAULT_WHITELIST_FILE="${MODULEJAIL_DEFAULT_WHITELIST_FILE:-/etc/modulejail/whi
 # where most drivers are compiled in but a few modular essentials remain.
 BASELINE_MINIMAL='ext4 xfs btrfs vfat fat nls_cp437 nls_iso8859_1 nls_utf8 tmpfs loop overlay autofs4 crc32c_generic crc32c_intel libcrc32c crc16'
 
-# BASELINE_CONSERVATIVE (MINIMAL + 39 entries ≈ 55 total):
+# BASELINE_CONSERVATIVE (MINIMAL + 44 entries ≈ 60 total):
 # Virtio/KVM, common storage controllers, common ethernet NICs, HID/input,
-# dm-crypt/LVM, and crypto primitives. Default profile.
+# dm-crypt/LVM, crypto primitives, socket diagnostics (ss/system-monitor),
+# CPU governor, kernel TLS. Default profile.
 # Intent: "Bare-metal or VM Linux server across the mainstream hardware matrix."
-BASELINE_CONSERVATIVE="$BASELINE_MINIMAL virtio virtio_ring virtio_pci virtio_blk virtio_net virtio_scsi virtio_balloon virtio_rng nvme nvme_core ahci libahci libata sd_mod sr_mod scsi_mod usb_storage uas e1000 e1000e igb igc ixgbe r8169 tg3 bnxt_en bnx2 hid hid_generic usbhid i8042 dm_mod dm_crypt dm_mirror aes_generic aesni_intel sha256_generic xts cbc"
+BASELINE_CONSERVATIVE="$BASELINE_MINIMAL virtio virtio_ring virtio_pci virtio_blk virtio_net virtio_scsi virtio_balloon virtio_rng nvme nvme_core ahci libahci libata sd_mod sr_mod scsi_mod usb_storage uas e1000 e1000e igb igc ixgbe r8169 tg3 bnxt_en bnx2 hid hid_generic usbhid i8042 dm_mod dm_crypt dm_mirror aes_generic aesni_intel sha256_generic xts cbc inet_diag tcp_diag udp_diag acpi_cpufreq tls"
 
-# BASELINE_DESKTOP (CONSERVATIVE + ~50 entries ≈ 105 total):
+# BASELINE_DESKTOP (CONSERVATIVE + ~60 entries ≈ 120 total):
 # Graphics/DRM, WiFi, Bluetooth, audio (ALSA/HDA), USB host controllers,
-# misc desktop peripherals, and webcam/video4linux.
+# misc desktop peripherals, webcam/video4linux, removable-media
+# filesystems (exfat/f2fs/ntfs3/isofs), and CPU EDAC.
 # Intent: "Laptop or workstation — won't break WiFi, BT, audio, or video."
 # shellcheck disable=SC2034  # referenced indirectly via the profile case statement
-BASELINE_DESKTOP="$BASELINE_CONSERVATIVE drm drm_kms_helper i915 amdgpu radeon nouveau nvidia ttm video backlight cfg80211 mac80211 iwlwifi iwlmvm iwldvm ath9k ath10k_core ath10k_pci ath11k brcmfmac brcmsmac rtw88_core rtw89_core rtl8xxxu bluetooth btusb btintel btrtl btbcm hci_uart snd snd_pcm snd_timer snd_hda_intel snd_hda_codec snd_hda_codec_realtek snd_hda_codec_hdmi snd_hda_codec_generic snd_usb_audio snd_seq xhci_hcd xhci_pci ehci_hcd ehci_pci uhci_hcd usblp cdc_acm joydev evdev videodev uvcvideo media exfat"
+BASELINE_DESKTOP="$BASELINE_CONSERVATIVE drm drm_kms_helper i915 amdgpu radeon nouveau nvidia ttm video backlight cfg80211 mac80211 iwlwifi iwlmvm iwldvm ath9k ath10k_core ath10k_pci ath11k brcmfmac brcmsmac rtw88_core rtw89_core rtl8xxxu bluetooth btusb btintel btrtl btbcm hci_uart snd snd_pcm snd_timer snd_hda_intel snd_hda_codec snd_hda_codec_realtek snd_hda_codec_hdmi snd_hda_codec_generic snd_usb_audio snd_seq xhci_hcd xhci_pci ehci_hcd ehci_pci uhci_hcd usblp cdc_acm joydev evdev videodev uvcvideo media exfat f2fs ntfs3 isofs cdrom amd64_edac i7core_edac ie31200_edac"
 
 # === SYSADMIN WHITELIST ===
 # Site-local additions to the keep-set, in addition to the selected baseline

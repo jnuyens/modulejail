@@ -5,6 +5,93 @@ All notable changes to ModuleJail are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.3] - 2026-05-29
+
+Hotfix release. The v1.3.2 baseline additions (this morning) broke
+the v1.1.4 byte-identical regression test in CI: three of the newly-
+baselined modules (`inet_diag`, `tcp_diag`, `udp_diag`) were present
+in the v1.1.4-era reference fixture, so moving them from blacklisted
+to kept shifted the install-line count by 3 (6363 -> 6360). The
+modulejail binary's behavior was correct in v1.3.2; the failing test
+was a reference-fixture issue, not a code issue.
+
+### Fixed
+
+- `tests/fixtures/v1.1.4-regression/expected-blacklist.conf`
+  regenerated to reflect the v1.3.2 baseline additions. The contract
+  scope is clarified in `tests/cases/v1.1.4-regression.sh`: the
+  v1.1.4 byte-identical regression contract applies to the install-
+  line **rendering** (the per-line `install <name> /bin/true` form),
+  not to the **set** of modules that end up in the file. Intentional
+  baseline additions are allowed to change the module set; the test
+  reference is updated in the same commit. Future baseline additions
+  follow the same pattern.
+
+### Notes
+
+- Operators already on v1.3.2 do not need to upgrade for any
+  behavioral reason; v1.3.3 ships identical modulejail logic. The
+  upgrade is recommended only for clean CI signaling and to be on
+  the latest tag.
+- Adding `tests/run-fixtures.sh` to the pre-release pre-flight (it
+  was previously implicit via CI-on-push; running it locally before
+  tagging would have caught this).
+
+## [1.3.2] - 2026-05-29
+
+Patch release. Baseline maturation driven by operator feedback - the
+DESKTOP and CONSERVATIVE profiles gain modules that turned out to be
+load-on-demand in the wild but were not yet baseline-protected. No
+flag changes; no behavior changes outside the keep-set growth. v1.1.4
+byte-identical install-line body preserved (6363 / 6363 install lines).
+
+### Added
+
+- `BASELINE_CONSERVATIVE` now includes:
+  - `inet_diag`, `tcp_diag`, `udp_diag` - inet socket diagnostics
+    auto-loaded by `ss(8)`, `iotop(8)`, and most system-monitor tools
+    (KDE System Monitor, GNOME System Monitor, btop, glances).
+  - `acpi_cpufreq` - ACPI-based x86 CPU frequency governor. Loaded on
+    most laptops and servers that don't use `intel_pstate`. Often
+    built-in to distro kernels; baseline addition is a no-op there and
+    safety-net on kernels where it ships as a module.
+  - `tls` - kernel TLS (kTLS). Increasingly load-on-demand for
+    HTTPS-heavy daemons and modern package managers. Server-side too
+    (kTLS in nginx, NFS-over-TLS).
+- `BASELINE_DESKTOP` (on top of the CONSERVATIVE additions above) now
+  includes:
+  - `f2fs` - modern flash-friendly filesystem, common on partition
+    tools and external drives.
+  - `ntfs3` - read/write NTFS driver, in-tree since 5.15. Standard
+    for mounting Windows drives.
+  - `isofs`, `cdrom` - ISO 9660 and optical-media support, for `.iso`
+    mounting and CD/DVD drives.
+  - `amd64_edac`, `i7core_edac`, `ie31200_edac` - CPU EDAC (memory
+    error detection) for AMD and common Intel families. These are
+    loaded by udev later in the boot sequence; including them in the
+    baseline avoids the race where a ModuleJail run at steady-state
+    might find them not-yet-loaded.
+
+### Credit
+
+@Dizirgee in [issue #16](https://github.com/jnuyens/modulejail/issues/16)
+for the well-organized, evidence-based survey of modules that turned
+out to need baseline protection. The feedback loop was nicely closed
+by @teou1's `examples/blocked-module-popup.sh` (v1.3.1) which
+@Dizirgee was using to catch the blocked-module attempts in real time.
+
+### Notes
+
+- Declined from the same issue as better-as-operator-`WHITELIST` rather
+  than baseline-default: `ntfs` (superseded by `ntfs3`), `nbd`
+  (sysadmin tool, not desktop default), `ib_core` (HPC/datacenter, not
+  desktop). Operators with specific needs can add these to the
+  `WHITELIST=` line near the top of the script.
+- Manjaro forum operators have started a community knowledge base at
+  https://forum.manjaro.org/t/howto-modulejail/187877 (authored by
+  @andreas85) covering operator-specific module sets we don't bake
+  into baselines.
+
 ## [1.3.1] - 2026-05-27
 
 Documentation-heavy patch release. One small additive baseline change

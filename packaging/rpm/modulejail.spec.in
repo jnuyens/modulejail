@@ -35,6 +35,8 @@ install -Dm755 modulejail   %{buildroot}%{_bindir}/modulejail
 install -Dm644 README.md    %{buildroot}%{_docdir}/%{name}/README.md
 install -Dm644 LICENSE      %{buildroot}%{_docdir}/%{name}/LICENSE
 install -Dm644 modulejail.8 %{buildroot}%{_mandir}/man8/modulejail.8
+install -Dm644 modulejail.service %{buildroot}%{_unitdir}/modulejail.service
+install -Dm644 modulejail.timer %{buildroot}%{_unitdir}/modulejail.timer
 
 %files
 %{_bindir}/modulejail
@@ -42,6 +44,32 @@ install -Dm644 modulejail.8 %{buildroot}%{_mandir}/man8/modulejail.8
 %doc %{_docdir}/%{name}/README.md
 %license %{_docdir}/%{name}/LICENSE
 %{_mandir}/man8/modulejail.8*
+%{_unitdir}/modulejail.service
+%{_unitdir}/modulejail.timer
+
+%post
+if command -v systemctl >/dev/null 2>&1; then
+    systemctl daemon-reload || :
+fi
+
+if [ "$1" -eq 1 ]; then
+    cat <<'EOF'
+
+modulejail.timer can be enabled to automatically run modulejail 5 minutes after boot
+
+modulejail.timer has been installed but is not enabled by default.
+
+To enable modulejail.timer for the next reboot, run:
+
+    sudo systemctl enable modulejail.timer
+
+EOF
+fi
+
+%postun
+if command -v systemctl >/dev/null 2>&1; then
+    systemctl daemon-reload || :
+fi
 
 %changelog
 * Mon May 18 2026 Jasper Nuyens <jnuyens@linuxbe.com> - __VERSION__-1

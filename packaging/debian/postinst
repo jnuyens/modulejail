@@ -1,0 +1,21 @@
+#!/bin/sh
+set -e
+
+SERVICE_NAME="modulejail.timer"
+
+if command -v systemctl >/dev/null 2>&1; then
+    systemctl daemon-reload || true
+fi
+
+cat <<EOF
+${SERVICE_NAME} can be enabled to automatically run modulejail 5 minutes after boot
+
+${SERVICE_NAME} has been installed but is not enabled by default.
+
+To enable ${SERVICE_NAME} for the next reboot, run:
+
+    sudo systemctl enable ${SERVICE_NAME}
+
+EOF
+
+exit 0

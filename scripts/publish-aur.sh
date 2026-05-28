@@ -112,10 +112,14 @@ else
         fi
     fi
 
+    # Update pkgver, pkgrel, and only the FIRST entry of the sha256sums array
+    # (the tarball hash). The remaining entries (SKIP for the .sig, the stable
+    # hash for the signing-key.gpg) span subsequent lines and must be left
+    # untouched - matching the closing `)` would corrupt the multi-line array.
     sed -i.bak \
         -e "s/^pkgver=.*/pkgver=$NEW_PKGVER/" \
         -e "s/^pkgrel=.*/pkgrel=$NEW_PKGREL/" \
-        -e "s/^sha256sums=.*/sha256sums=('$SHA256')/" \
+        -e "s/^sha256sums=('[^']*'/sha256sums=('$SHA256'/" \
         "$PKGBUILD"
     rm -f "$PKGBUILD.bak"
 

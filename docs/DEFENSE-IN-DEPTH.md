@@ -129,9 +129,30 @@ load on the user's behalf.
 | `/usr/sbin/mount.cifs` | `cifs`, `nls_*` | Common on hosts with SMB shares |
 | `/usr/sbin/mount.ecryptfs_private` | `ecryptfs` | Has had its own CVEs; some distros dropped the setuid |
 
-**ModuleJail coverage:** aggressive. `fuse` is not in any baseline, so it
-gets blacklisted by default. **If your operators use sshfs, snap mounts,
-AppImages, or `ntfs-3g`, add `fuse` to your sysadmin WHITELIST.**
+**Plus a non-mount autoload path for the same modules:** some
+filesystem modules also register kernel key types and request-key
+upcalls. The kernel `cifs.ko` module registers the `cifs.spnego` key
+type at module-init time; once loaded, an unprivileged user can call
+`request_key("cifs.spnego", attacker_controlled_description, ...)`,
+which the kernel routes to the userspace `cifs.upcall` helper running
+as root. The helper trusts the attacker-supplied description fields
+as if they came from the kernel CIFS client - the basis of the
+**CIFSwitch** disclosure (May 2026). On a host where `cifs.ko` is
+not loaded, `request_key()` returns `-ENOKEY` and the chain breaks
+at step one; on a host where `cifs.ko` IS loaded (CIFS-client host
+that mounts SMB shares), modulejail's blacklist alone does not
+protect, and the host needs the upstream kernel patch.
+
+**ModuleJail coverage:** aggressive. `fuse`, `cifs`, `nfs`, `nfsv3`,
+`nfsv4`, `ceph`, `ecryptfs` are not in any baseline, so they get
+blacklisted by default on hosts that are not actively using those
+filesystems. **If your operators use sshfs, snap mounts, AppImages,
+or `ntfs-3g`, add `fuse` to your sysadmin WHITELIST. If your hosts
+mount SMB shares as CIFS clients, add `cifs` (and `nls_*` if
+specific code pages are needed). NFS-mounting clients need `nfs` +
+the protocol versions in use. Samba SERVERS (running `smbd`) and
+`ksmbd` SERVERS do not need `cifs.ko` and should leave it
+blacklisted.**
 
 ### Tier 4 - binfmt autoload via execve()
 
@@ -423,6 +444,7 @@ each add one more layer that an attacker has to bypass.
 
 - [Copy Fail (CVE-2026-31431) — Wiz](https://www.wiz.io/blog/copyfail-cve-2026-31431-linux-privilege-escalation-vulnerability)
 - [CVE-2026-31431 Sysdig analysis (mitigation = install algif_aead /bin/false)](https://www.sysdig.com/blog/cve-2026-31431-copy-fail-linux-kernel-flaw-lets-local-users-gain-root-in-seconds)
+- [CIFSwitch - 19-year-old Linux CIFS trust-boundary bug (CIQ, May 2026)](https://ciq.com/blog/cifswitch-ai-19-year-bug)
 - [CVE-2025-21756 vsock UAF — SentinelOne](https://www.sentinelone.com/vulnerability-database/cve-2025-21756/)
 - [CVE-2025-40331 SCTP TOCTOU (NVD)](https://nvd.nist.gov/vuln/detail/CVE-2025-40331)
 - [TIPC remote RCE (CVE-2021-43267)](https://www.sentinelone.com/labs/tipc-remote-linux-kernel-heap-overflow-allows-arbitrary-code-execution/)

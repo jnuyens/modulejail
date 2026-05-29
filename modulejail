@@ -76,6 +76,54 @@ BASELINE_CONSERVATIVE="$BASELINE_MINIMAL virtio virtio_ring virtio_pci virtio_bl
 # shellcheck disable=SC2034  # referenced indirectly via the profile case statement
 BASELINE_DESKTOP="$BASELINE_CONSERVATIVE drm drm_kms_helper i915 amdgpu radeon nouveau nvidia ttm video backlight cfg80211 mac80211 iwlwifi iwlmvm iwldvm ath9k ath10k_core ath10k_pci ath11k brcmfmac brcmsmac rtw88_core rtw89_core rtl8xxxu bluetooth btusb btintel btrtl btbcm hci_uart snd snd_pcm snd_timer snd_hda_intel snd_hda_codec snd_hda_codec_realtek snd_hda_codec_hdmi snd_hda_codec_generic snd_usb_audio snd_seq xhci_hcd xhci_pci ehci_hcd ehci_pci uhci_hcd usblp cdc_acm joydev evdev videodev uvcvideo media exfat f2fs ntfs3 isofs cdrom amd64_edac i7core_edac ie31200_edac"
 
+# Deliberately NOT in any baseline (= blacklisted by default on hosts
+# where they are not currently loaded). These categories have been the
+# source of most unprivileged-user → root LPE chains in recent Linux
+# kernel CVEs, and operators who genuinely need them are expected to add
+# the specific names to the WHITELIST= below.
+#
+# Network filesystems (CIFS / NFS / Ceph / GlusterFS / 9P):
+#   cifs, nfs, nfsv3, nfsv4, ceph, fuse, 9p
+#   Reachable via mount(2) with the matching fstype. CIFS in particular
+#   carries cifs.upcall trust chains (see CIFSwitch, May 2026) that
+#   chain to root via request_key("cifs.spnego", ...) - which fails
+#   with -ENOKEY when cifs.ko is not loaded. NFS/Ceph/GlusterFS get
+#   the same treatment: keep them out of the keep-set on hosts that
+#   are not actively mounting those filesystems.
+#
+# Legacy / niche socket families (PF_X25, PF_AX25, PF_DECNET, PF_IPX,
+# PF_APPLETALK, PF_NETROM, PF_ROSE, PF_LLC, AF_RDS, AF_TIPC, AF_NFC,
+# AF_VSOCK, AF_CAN, AF_QIPCRTR, AF_SMC):
+#   sctp, dccp, tipc, rds, nfc, vsock, can, qrtr, smc, x25, ax25,
+#   decnet, ipx, appletalk, netrom, rose, llc2
+#   Reachable via socket(AF_X, ...) by any unprivileged user. Many
+#   distros already ship `blacklist net-pf-N` for the worst legacy
+#   ones; ModuleJail extends that to the whole class on hosts that
+#   are not using them.
+#
+# Crypto algorithm glue (AF_ALG handlers):
+#   algif_aead, algif_skcipher, algif_hash, algif_rng
+#   The Copy Fail CVE (CVE-2026-31431) is exactly this class. The
+#   primitive ciphers in BASELINE_CONSERVATIVE (aes_generic, xts, cbc)
+#   are kept because dm-crypt / WireGuard / kTLS use them; the algif_*
+#   glue is not used by anything on a typical server.
+#
+# Exotic crypto algorithms:
+#   aria, aegis128, chacha20poly1305 (standalone), sm4, streebog,
+#   serpent, twofish, camellia, cast5, cast6, tea, tgr192, wp512
+#   Reachable via the same AF_ALG path; less load-bearing than the
+#   AES family.
+#
+# Misc kernel-attack-surface modules an operator is unlikely to need:
+#   rxe (Soft-RoCE: CVE-2026-46133), binfmt_aout, binfmt_em86,
+#   binfmt_flat, nf_tables sub-modules a non-firewall host does not
+#   reference.
+#
+# See docs/DEFENSE-IN-DEPTH.md for the full 7-tier autoload taxonomy
+# and the threat-model framing. Operators who genuinely need any of
+# the above should add the specific module names to the WHITELIST=
+# variable below.
+
 # === SYSADMIN WHITELIST ===
 # Site-local additions to the keep-set, in addition to the selected baseline
 # profile. Modules listed here will never appear in the generated blacklist.

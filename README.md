@@ -330,6 +330,45 @@ audio, and video drivers must be preserved. `minimal` is for environments
 where you have full control over which drivers are loaded and want the
 smallest possible baseline.
 
+### Categories deliberately NOT in any baseline
+
+The full list lives as a comment block inside the script itself, just
+below the `BASELINE_DESKTOP` definition. Notable categories that
+**all three profiles** treat as blacklisted-by-default on hosts that
+are not actively using them:
+
+- **Network filesystems** — `cifs`, `nfs`, `nfsv3`, `nfsv4`, `ceph`,
+  `fuse`, `9p`. Reachable via `mount(2)` with the matching fstype.
+  CIFS additionally carries the `cifs.upcall` trust chain that
+  CIFSwitch (May 2026) exploits via `request_key("cifs.spnego", ...)`
+  — which fails with `-ENOKEY` when `cifs.ko` is not loaded.
+  Operators who mount SMB shares as CIFS clients should add `cifs` to
+  their `WHITELIST=`. Samba (`smbd`) and `ksmbd` SERVERS do not need
+  `cifs.ko` and should leave it blacklisted.
+- **Legacy / niche socket families** — `sctp`, `dccp`, `tipc`, `rds`,
+  `nfc`, `vsock`, `can`, `qrtr`, `smc`, `x25`, `ax25`, `decnet`,
+  `ipx`, `appletalk`, `netrom`, `rose`, `llc2`. Reachable via
+  `socket(AF_X, ...)` by any unprivileged user. Many distros already
+  ship `blacklist net-pf-N` for the worst legacy ones; ModuleJail
+  extends that to the whole class on hosts not using them.
+- **Crypto algorithm glue** — `algif_aead`, `algif_skcipher`,
+  `algif_hash`, `algif_rng` (Copy Fail / CVE-2026-31431 is exactly
+  this class) and the long tail of exotic algorithms (`aria`,
+  `chacha20poly1305` standalone, `sm4`, `streebog`, `serpent`,
+  `twofish`, `camellia`, etc.). The primitive ciphers in
+  `BASELINE_CONSERVATIVE` (`aes_generic`, `aesni_intel`, `xts`,
+  `cbc`, `sha256_generic`) are kept because dm-crypt / WireGuard /
+  kTLS use them.
+- **Other recent-CVE modules an operator is unlikely to need** —
+  `rxe` (Soft-RoCE; CVE-2026-46133), `binfmt_aout`, `binfmt_em86`,
+  `binfmt_flat`, niche `xt_*` netfilter helpers.
+
+See [`docs/DEFENSE-IN-DEPTH.md`](docs/DEFENSE-IN-DEPTH.md) for the
+7-tier autoload taxonomy and the threat-model framing. If your host
+genuinely needs any of the above (e.g. a CIFS-client host needs
+`cifs`, an NFS-client host needs `nfs`), add the specific module
+names to the `WHITELIST=` line near the top of the script.
+
 ## The sysadmin whitelist
 
 A site-local `WHITELIST` variable near the top of the script holds

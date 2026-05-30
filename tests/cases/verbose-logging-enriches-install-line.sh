@@ -51,16 +51,35 @@ assert_grep '^# install-line: /bin/sh \+ logger \(syslog tag: modulejail\)$' \
 # Every install line should reference $PPID, loginuid, pcomm, pexe as
 # literal strings (single-quoted; resolved at modprobe time by /bin/sh).
 # assert_grep uses ERE (grep -E); the literal `(` chars in the
-# `$(cat ...)` substrings need `\(` escape so ERE treats them as
-# literal rather than as group-open metacharacters.
+# `$(...)` substrings need `\(` escape so ERE treats them as literal
+# rather than as group-open metacharacters.
 # shellcheck disable=SC2016  # the \$PPID etc. are LITERAL by design
 assert_grep 'ppid=\$PPID' "$OUT_VERBOSE" body-verbose-ppid
 # shellcheck disable=SC2016
 assert_grep 'loginuid=\$\(cat /proc/\$PPID/loginuid' "$OUT_VERBOSE" body-verbose-loginuid
 # shellcheck disable=SC2016
 assert_grep 'pcomm=\$\(cat /proc/\$PPID/comm' "$OUT_VERBOSE" body-verbose-pcomm
+# pexe uses tr twice (v1.3.5; v1.3.4 used cat which concatenated argv
+# elements because shell substitution strips NULs). First tr strips
+# control bytes (\x01-\x08 \x0b-\x1f \x7f) for log-injection
+# hardening; second tr converts NUL to space so argv elements show
+# as space-separated. Per @retry-the-user in #18. Using grep -F
+# (fixed string) here because the install-line content has literal
+# backslash-octal sequences that are awkward to match in ERE.
+if ! grep -F -e "pexe=\$(/usr/bin/tr -d '\\001-\\010\\013-\\037\\177' < /proc/\$PPID/cmdline" "$OUT_VERBOSE" > /dev/null; then
+    case_fail "pexe tr -d control-strip pattern not found in $OUT_VERBOSE"
+fi
+if ! grep -F -e "| /usr/bin/tr '\\0' ' '" "$OUT_VERBOSE" > /dev/null; then
+    case_fail "pexe tr NUL-to-space pattern not found in $OUT_VERBOSE"
+fi
+
+# Verbose install line MUST NOT have the /bin/sh -c wrapper (v1.3.5;
+# v1.3.4 had one, which caused $PPID to point at the wrapper sh
+# instead of modprobe). Per @retry-the-user in #18.
 # shellcheck disable=SC2016
-assert_grep 'pexe=\$\(cat /proc/\$PPID/cmdline' "$OUT_VERBOSE" body-verbose-pexe
+if grep -qE "/bin/sh -c '/usr/bin/logger" "$OUT_VERBOSE"; then
+    case_fail "verbose install line contains a redundant /bin/sh -c wrapper - \$PPID will point at the wrapper sh, not at modprobe"
+fi
 
 # Body MUST NOT carry the enriched form under default (no flag).
 # shellcheck disable=SC2016

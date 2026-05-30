@@ -5,6 +5,71 @@ All notable changes to ModuleJail are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.5] - 2026-05-30
+
+Hotfix release. Two bugs in v1.3.4's `--verbose-logging` install line,
+both caught by @retry-the-user in
+[issue #18](https://github.com/jnuyens/modulejail/issues/18) within
+hours of v1.3.4 shipping. v1.1.4 byte-identical install-line body
+preserved under default flags. Default (non-verbose) install-line
+form unchanged.
+
+### Fixed
+
+- `--verbose-logging` install-line was wrapped in `/bin/sh -c '...'`,
+  but `modprobe` already invokes commands via `system() → sh -c`. That
+  created a second shell layer, so `$PPID` inside the inner shell
+  pointed at the wrapper sh instead of `modprobe`. Result: `pcomm=sh`
+  and `pexe=` showed the install-line content itself as the cmdline
+  of the wrapper sh - not the actual caller. Fixed: drop the
+  `/bin/sh -c '...'` wrapper. modprobe's own `sh -c` is the only
+  shell layer; `$PPID` resolves directly to `modprobe`.
+- `--verbose-logging` install-line used `$(cat /proc/$PPID/cmdline)`
+  to read the cmdline. Shell command substitution strips NUL bytes
+  from captured output, so `modprobe\0cpuid\0` became
+  `modprobecpuid` in the logger message - argv elements concatenated
+  with no visible separator. Fixed: pipe cmdline through `tr` to
+  convert NULs to spaces (`tr '\0' ' '`) instead of relying on shell
+  substitution.
+
+### Added
+
+- Log-injection hardening (defense-in-depth) in the `--verbose-logging`
+  install-line. The cmdline is now also piped through
+  `tr -d '\001-\010\013-\037\177'` to strip control bytes (newline,
+  carriage return, form-feed, terminal-escape, DEL) before the logger
+  message is built. Shell command substitution treats the substituted
+  text as data (no second-pass expansion), so **command injection
+  via attacker-controlled cmdline content is not possible** - this
+  hardening covers log injection only (attacker fabricating fake log
+  entries via embedded newlines, or terminal-control sequences
+  appearing when an admin views the log with `cat`).
+- New `MODULEJAIL_TR_PATH` environment variable (test-only plumbing,
+  parallel to `MODULEJAIL_LOGGER_PATH`). `--verbose-logging` now
+  requires `tr` to be executable; modulejail exits `EX_NOINPUT=66`
+  with a clear message if `/usr/bin/tr` (or the override path) is
+  absent, rather than silently generating broken install-lines that
+  would emit `tr: command not found` into syslog at modprobe-time.
+- New acceptance case `verbose-logging-requires-tr.sh` covering the
+  missing-tr error path. Suite is now 34/34 PASS.
+
+### Credit
+
+@retry-the-user in
+[issue #18](https://github.com/jnuyens/modulejail/issues/18) for the
+real-time bug-hunting: both root causes were diagnosed correctly in
+the issue thread (double-shell layering, NUL-stripping by shell
+substitution) before this hotfix was committed. The command-injection
+question that prompted the log-injection hardening also came from the
+same thread.
+
+### Notes
+
+- Operators on v1.3.4 should upgrade to get the corrected
+  `--verbose-logging` output. v1.3.4 operators not using
+  `--verbose-logging` see no behavior difference between v1.3.4 and
+  v1.3.5 (the default install-line is byte-identical).
+
 ## [1.3.4] - 2026-05-30
 
 Patch release. One new flag (`--verbose-logging`), five new

@@ -15,7 +15,7 @@ export LC_ALL
 # --- Tool version + sysexits.h exit code constants ---
 # VERSION is the single source of truth for both --version and the
 # generated blacklist header. Bump on every release per SemVer.
-VERSION='1.3.4'
+VERSION='1.3.5'
 EX_OK=0
 # sysexits.h conventional codes (see man 3 sysexits):
 #   64=usage 65=dataerr 66=noinput 70=software 71=oserr 73=cantcreat 77=noperm
@@ -435,13 +435,25 @@ if [ -z "$NO_SYSLOG_LOGGING" ] && [ -x "${MODULEJAIL_LOGGER_PATH:-/usr/bin/logge
     USE_LOGGER=1
 fi
 
-# --verbose-logging requires the logger binary to be present (since the
-# enriched install-line invokes logger). If logger is absent, --verbose-
-# logging has nothing to enrich; fail loudly rather than silently
-# falling back to the v1.1.4 /bin/true form.
+# --verbose-logging requires the logger binary to be present (the
+# enriched install-line invokes logger). If logger is absent, fail
+# loudly rather than silently falling back to the v1.1.4 /bin/true
+# form (nothing to enrich).
 if [ "$VERBOSE_LOGGING" -eq 1 ] && [ -z "$USE_LOGGER" ]; then
     printf 'modulejail: error: --verbose-logging requires the logger binary at %s (install util-linux or override via MODULEJAIL_LOGGER_PATH)\n' \
         "${MODULEJAIL_LOGGER_PATH:-/usr/bin/logger}" >&2
+    exit $EX_NOINPUT
+fi
+
+# --verbose-logging also requires `tr` (coreutils) - the enriched
+# install-line pipes /proc/$PPID/cmdline through tr to convert NULs
+# to spaces and strip control bytes. Without tr the install-line would
+# emit `tr: command not found` into syslog, mangling the log entry.
+# Test override: MODULEJAIL_TR_PATH (analogous to MODULEJAIL_LOGGER_PATH).
+TR_PATH=${MODULEJAIL_TR_PATH:-/usr/bin/tr}
+if [ "$VERBOSE_LOGGING" -eq 1 ] && [ ! -x "$TR_PATH" ]; then
+    printf 'modulejail: error: --verbose-logging requires tr at %s (install coreutils or override via MODULEJAIL_TR_PATH)\n' \
+        "$TR_PATH" >&2
     exit $EX_NOINPUT
 fi
 
@@ -770,20 +782,42 @@ parse_whitelist_file() {
 emit_install_line() {
     if [ -n "$USE_LOGGER" ]; then
         if [ "$VERBOSE_LOGGING" -eq 1 ]; then
-            # Verbose form (v1.3.4+): enrich the logger call with the
-            # caller's PID, loginuid, parent comm, and argv[0] (read
-            # from /proc/$PPID/...). Inside the install-line's outer
-            # single-quoted /bin/sh -c argument, the $PPID and $(cat
-            # /proc/$PPID/...) are LITERAL until modprobe invokes
-            # /bin/sh at module-load time; sh then parameter-expands
-            # them at that moment. Issue #18: @retry-the-user.
+            # Verbose form (v1.3.4+, fixed in v1.3.5 per @retry-the-user
+            # in #18): enrich the logger call with the caller's PID,
+            # loginuid, parent comm, and argv[0] read from /proc/$PPID/.
+            #
+            # Two key properties:
+            #
+            # 1. NO `/bin/sh -c '...'` wrapper. modprobe invokes install
+            #    commands via system() = sh -c "<command>", so wrapping
+            #    the logger call in `/bin/sh -c '...'` would create a
+            #    second shell layer, making $PPID point at the wrapper
+            #    sh (not at modprobe). Without the wrapper, modprobe's
+            #    own sh -c is the only shell layer and $PPID resolves
+            #    to modprobe.
+            #
+            # 2. cmdline is piped through tr twice: first to strip
+            #    control bytes (\x01-\x08 \x0b-\x1f \x7f - i.e. everything
+            #    non-printable except space \x20 and the NUL separators
+            #    we handle in the next stage), then to convert NUL to
+            #    space so the argv elements show as space-separated.
+            #    Why tr-then-tr instead of cat: shell command
+            #    substitution strips NULs from captured output, which
+            #    would concatenate argv elements ("modprobecpuid").
+            #    Why strip control bytes: defense against log injection
+            #    via attacker-controlled cmdline content (newlines,
+            #    terminal-control sequences). Shell command substitution
+            #    treats the substituted text as data (no second
+            #    expansion pass), so command injection through cmdline
+            #    is not possible; this is hardening against log
+            #    injection only.
             if [ "$FAIL_ON_MODULE_LOAD" -eq 0 ]; then
-                awk '{
-                    printf "install %s /bin/sh -c '\''/usr/bin/logger -t modulejail \"blocked: %s ppid=$PPID pcomm=$(cat /proc/$PPID/comm 2>/dev/null) loginuid=$(cat /proc/$PPID/loginuid 2>/dev/null) pexe=$(cat /proc/$PPID/cmdline 2>/dev/null)\" 2>/dev/null; exit 0'\''\n", $1, $1
+                awk -v tr="$TR_PATH" '{
+                    printf "install %s /usr/bin/logger -t modulejail \"blocked: %s ppid=$PPID pcomm=$(cat /proc/$PPID/comm 2>/dev/null) loginuid=$(cat /proc/$PPID/loginuid 2>/dev/null) pexe=$(%s -d '\''\\001-\\010\\013-\\037\\177'\'' < /proc/$PPID/cmdline 2>/dev/null | %s '\''\\0'\'' '\'' '\'' 2>/dev/null)\" 2>/dev/null; exit 0\n", $1, $1, tr, tr
                 }' "$1"
             else
-                awk '{
-                    printf "install %s /bin/sh -c '\''/usr/bin/logger -t modulejail \"blocked: %s ppid=$PPID pcomm=$(cat /proc/$PPID/comm 2>/dev/null) loginuid=$(cat /proc/$PPID/loginuid 2>/dev/null) pexe=$(cat /proc/$PPID/cmdline 2>/dev/null)\" 2>/dev/null; /bin/false'\''\n", $1, $1
+                awk -v tr="$TR_PATH" '{
+                    printf "install %s /usr/bin/logger -t modulejail \"blocked: %s ppid=$PPID pcomm=$(cat /proc/$PPID/comm 2>/dev/null) loginuid=$(cat /proc/$PPID/loginuid 2>/dev/null) pexe=$(%s -d '\''\\001-\\010\\013-\\037\\177'\'' < /proc/$PPID/cmdline 2>/dev/null | %s '\''\\0'\'' '\'' '\'' 2>/dev/null)\" 2>/dev/null; /bin/false\n", $1, $1, tr, tr
                 }' "$1"
             fi
         elif [ "$FAIL_ON_MODULE_LOAD" -eq 0 ]; then

@@ -30,7 +30,6 @@ do
     if [ -e "$path" ]; then
         printf 'modulejail-test: SKIP (%s exists on test host)\n' "$path"
         case_pass
-        exit 0
     fi
 done
 

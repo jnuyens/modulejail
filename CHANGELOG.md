@@ -5,6 +5,37 @@ All notable changes to ModuleJail are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.1] - 2026-06-08
+
+Regression hotfix for the v1.4.0 desktop-profile SD card addition on
+bleeding-edge kernels.
+
+### Fixed
+
+- `rpmb_core` added to `BASELINE_DESKTOP`
+  ([#16](https://github.com/jnuyens/modulejail/issues/16), @fonic).
+  Between kernel 6.12 and 7.0 the RPMB (Replay Protected Memory Block)
+  code was split out of `mmc_core` into its own module. On kernels
+  with the split (Arch current, Fedora rawhide, openSUSE Tumbleweed,
+  Cachy / Liquorix variants, anyone tracking mainline), `mmc_block`
+  declares a hard `depends: mmc_core,rpmb-core` and fails to load with
+  missing-symbol errors if `rpmb-core` is in the blacklist.
+  v1.4.0's `mmc_core` + `mmc_block` desktop-profile addition therefore
+  fixed SD card readers on stable LTS kernels (Debian 13.4 with 6.12,
+  Rocky 9.7 with 5.14) but regressed them on 7.0+ kernels. v1.4.1
+  closes the gap: `rpmb_core` joins the desktop baseline, and the
+  filename normalization the script already does for the underscore
+  vs hyphen variance ("rpmb-core" vs "rpmb_core") covers every kernel
+  build convention. On older kernels where the module doesn't exist
+  separately, listing it is a harmless no-op.
+
+### Credit
+
+- @fonic ([#16](https://github.com/jnuyens/modulejail/issues/16)) for
+  the cross-kernel `modinfo mmc_block` diagnosis - this would have
+  shipped silently broken on every Arch / Fedora-rawhide / Tumbleweed
+  desktop install otherwise.
+
 ## [1.4.0] - 2026-06-07
 
 Feature release. Three operator-reported requests close together,

@@ -81,6 +81,7 @@ LIST_CHECKS=0
 FROM_STEP=0
 SUBJECT=''
 VERSION=''
+ASSUME_YES=0
 
 usage() {
     sed -n '2,/^$/p' "$0" | sed 's/^# *//'
@@ -93,6 +94,7 @@ while [ $# -gt 0 ]; do
         --skip-deb)     SKIP_DEB=1; shift ;;
         --skip-rpm)     SKIP_RPM=1; shift ;;
         --list-checks)  LIST_CHECKS=1; shift ;;
+        -y|--yes)       ASSUME_YES=1; shift ;;
         --from-step)    [ $# -ge 2 ] || { printf 'release.sh: --from-step requires N\n' >&2; exit $EX_USAGE; }; FROM_STEP=$2; shift 2 ;;
         --from-step=*)  FROM_STEP=${1#--from-step=}; shift ;;
         --subject)      [ $# -ge 2 ] || { printf 'release.sh: --subject requires text\n' >&2; exit $EX_USAGE; }; SUBJECT=$2; shift 2 ;;
@@ -120,13 +122,17 @@ confirm() {
         printf 'release.sh: dry-run: would prompt: %s\n' "$msg"
         return 0
     fi
+    if [ "$ASSUME_YES" -eq 1 ]; then
+        printf 'release.sh: -y / --yes: %s [auto-confirmed]\n' "$msg"
+        return 0
+    fi
     printf '\n%s [y/N] ' "$msg"
     if [ -t 0 ]; then
         read -r resp
     elif (: < /dev/tty) 2>/dev/null; then
         read -r resp < /dev/tty
     else
-        printf 'release.sh: error: non-interactive shell; cannot prompt for gate\n' >&2
+        printf 'release.sh: error: non-interactive shell; pass -y / --yes to skip prompts\n' >&2
         exit $EX_USAGE
     fi
     case "$resp" in

@@ -5,6 +5,40 @@ All notable changes to ModuleJail are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.3] - 2026-06-20
+
+Bug-fix release for a man page lint warning. RHEL / Arch / Debian /
+Ubuntu users get the same script; only the rendered `man 8 modulejail`
+output is affected.
+
+### Fixed
+
+- Man page used the non-portable `.URL` macro (from the `www.tmac`
+  groff extension, not loaded by default in Debian's groff pipeline).
+  Replaced with the standard `.UR` / `.UE` pair from the `man` macro
+  set. Catches the lintian warning Jérémy Lal saw during the Debian
+  package build:
+  ```
+  W: modulejail: groff-message troff:<standard input>:569:
+     warning: name 'URL' not defined (possibly missing space after 'UR')
+     [usr/share/man/man8/modulejail.8.gz:1]
+  ```
+  Diagnosed and patch suggested by
+  [@kapouer](https://github.com/kapouer) in
+  [#23](https://github.com/jnuyens/modulejail/issues/23).
+
+### Added
+
+- New host-local test case `manpage-no-groff-warnings.sh` that
+  renders `man/modulejail.8.in` with placeholder version/date,
+  runs `mandoc -T lint`, and fails on any `ERROR` / `WARNING` /
+  `UNSUPP` diagnostic. Catches this class of bug pre-tag, so future
+  groff additions to the man page (e.g. another non-portable macro)
+  block the release ceremony at step 0 rather than landing in a
+  shipped tarball. Skips with exit code 77 (autoconf/TAP "skip")
+  when mandoc is not on the host; macOS, Debian, Arch, and Rocky
+  all ship it in their base or as a tiny dependency.
+
 ## [1.4.2] - 2026-06-20
 
 Bug-fix release for the Arch / mkinitcpio strip-hook invocation

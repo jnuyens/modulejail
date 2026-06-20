@@ -566,7 +566,9 @@ Tool name and version that produced the file.
 .TP
 .B "# https://modulejail.com"
 Project home page (source repository is at
-.URL https://github.com/jnuyens/modulejail "" .)
+.UR https://github.com/jnuyens/modulejail
+https://github.com/jnuyens/modulejail
+.UE ).
 .TP
 .B "# profile: PROFILE"
 The profile name passed to

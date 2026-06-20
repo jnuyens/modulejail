@@ -5,6 +5,63 @@ All notable changes to ModuleJail are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.2] - 2026-06-20
+
+Bug-fix release for the Arch / mkinitcpio strip-hook invocation
+pattern. The dracut (RHEL family) and initramfs-tools (Debian /
+Ubuntu) paths are unaffected.
+
+### Fixed
+
+- mkinitcpio strip-hook invocation: v1.4.0 and v1.4.1 installed the
+  `modulejail-strip` install hook correctly and registered a pacman
+  post-transaction trigger, but every callsite used the
+  `mkinitcpio -A modulejail-strip -P` pattern, which silently
+  no-ops. When `-P` regenerates presets it re-execs `mkinitcpio`
+  per preset with a reduced argument set that does NOT inherit
+  `-A`, so the strip hook was never added to the build for the
+  per-preset run, and the resulting initramfs still contained
+  `/etc/modprobe.d/modulejail-blacklist.conf`. Replaced with the
+  correct `mkinitcpio -P -- -A modulejail-strip` pattern (the `--`
+  forwards the `-A modulejail-strip` argument through the per-preset
+  re-exec). Affects three callsites in the script:
+  - pacman post-transaction trigger
+    (`/usr/share/libalpm/hooks/95-modulejail-strip.hook`)
+  - operator-facing one-liner printed by
+    `modulejail --install-initramfs-hook`
+  - `--install-initramfs-hook --dry-run` output
+
+  Diagnosed by [@welwood08](https://github.com/welwood08) in
+  [#19](https://github.com/jnuyens/modulejail/issues/19) using
+  `SHELLOPTS=xtrace` on a live Arch host. Verified end-to-end clean
+  on Rocky Linux 10.2 (dracut path) the same day to confirm the
+  bug is mkinitcpio-specific and the dracut path needs no change.
+
+### Operator notes
+
+- **Arch users who installed v1.4.0 or v1.4.1**: the pacman
+  post-transaction trigger has been silently no-op'ing on every
+  kernel install / upgrade. Upgrade to v1.4.2, then run once:
+  ```sh
+  sudo mkinitcpio -P -- -A modulejail-strip
+  sudo lsinitcpio /boot/initramfs-$(uname -r).img | grep modulejail-blacklist
+  ```
+  The second line should be empty after the rebuild. Subsequent
+  kernel installs are auto-clean.
+
+- **RHEL / Debian users**: no action required; the dracut and
+  initramfs-tools paths were never affected by this bug.
+
+- The post-install `%post` / `postinst` / `post_install` scripts
+  still deliberately do NOT run a full `dracut --force --regenerate-all`
+  / `update-initramfs -u -k all` / `mkinitcpio -P` because of the
+  wall-clock cost during a package upgrade and the lack of
+  in-the-wild reports of stale-baked initramfs damage. The operator
+  recovery path documented in
+  [#19](https://github.com/jnuyens/modulejail/issues/19) covers
+  upgrade-from-v1.3 cases where someone suspects their existing
+  initramfs may still contain a baked-in blacklist.
+
 ## [1.4.1] - 2026-06-08
 
 Regression hotfix for the v1.4.0 desktop-profile SD card addition on

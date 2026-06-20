@@ -27,7 +27,7 @@ assert_eq 0 "$rc" "mkinitcpio-dry-run-exit-code"
 
 assert_grep '^modulejail: dry-run: would write /etc/initcpio/install/modulejail-strip \(0755\)$' \
     "$CASE_TMP/stdout" mkinitcpio-dry-run-target-path
-assert_grep 'mkinitcpio -A modulejail-strip -P' \
+assert_grep 'mkinitcpio -P -- -A modulejail-strip' \
     "$CASE_TMP/stdout" mkinitcpio-dry-run-regen-command
 
 if [ -e /etc/initcpio/install/modulejail-strip ]; then

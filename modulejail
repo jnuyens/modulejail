@@ -433,7 +433,7 @@ EOF
                     printf 'modulejail: dry-run: would write %s (0644)\n' "$pacman_hook"
                 fi
                 # shellcheck disable=SC2016  # literal backticks intended for human-readable output
-                printf 'modulejail: dry-run: would run `mkinitcpio -A modulejail-strip -P`\n'
+                printf 'modulejail: dry-run: would run `mkinitcpio -P -- -A modulejail-strip`\n'
                 return 0
             fi
             cat > "$target_file" <<'EOF'
@@ -473,14 +473,14 @@ Target = usr/lib/modules/*/vmlinuz
 [Action]
 Description = Stripping modulejail blacklist from rebuilt initramfs images...
 When = PostTransaction
-Exec = /usr/bin/mkinitcpio -A modulejail-strip -P
+Exec = /usr/bin/mkinitcpio -P -- -A modulejail-strip
 NeedsTargets
 EOF
                 chmod 0644 "$pacman_hook"
                 printf 'modulejail: wrote pacman trigger: %s\n' "$pacman_hook"
             fi
             # shellcheck disable=SC2016  # literal backticks intended for human-readable output
-            printf 'modulejail: run `mkinitcpio -A modulejail-strip -P` to apply to existing initramfs images\n'
+            printf 'modulejail: run `mkinitcpio -P -- -A modulejail-strip` to apply to existing initramfs images\n'
             ;;
     esac
 

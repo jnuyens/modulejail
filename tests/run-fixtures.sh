@@ -145,21 +145,26 @@ if [ -n "$FILTER" ]; then
     fi
     printf 'modulejail tests: host-local case run (filter=%s)\n' "$FILTER"
     FAIL=0
+    SKIP=0
     TOTAL=0
     for case_file in $matches; do
         TOTAL=$((TOTAL + 1))
         printf '\n-- %s --\n' "$case_file"
-        if sh "$case_file"; then
-            : # case prints its own [name] PASS line
-        else
-            FAIL=$((FAIL + 1))
-        fi
+        set +e
+        sh "$case_file"
+        rc=$?
+        set -e
+        case $rc in
+            0)  : ;;                          # case prints its own [name] PASS line
+            77) SKIP=$((SKIP + 1)) ;;         # autoconf/TAP "skip" convention
+            *)  FAIL=$((FAIL + 1)) ;;
+        esac
     done
     if [ "$FAIL" -gt 0 ]; then
         printf '\nmodulejail tests: %d/%d case(s) FAILED.\n' "$FAIL" "$TOTAL" >&2
         exit 1
     fi
-    printf '\nmodulejail tests: %d/%d case(s) PASSED.\n' "$TOTAL" "$TOTAL"
+    printf '\nmodulejail tests: %d/%d case(s) PASSED, %d SKIPPED.\n' "$((TOTAL - SKIP))" "$TOTAL" "$SKIP"
     exit 0
 fi
 
@@ -207,6 +212,7 @@ if [ "$ONLY_HOST_LOCAL" = 1 ]; then
     fi
     printf 'modulejail tests: host-local case run (only-host-local)\n'
     FAIL=0
+    SKIP=0
     TOTAL=0
     for case_file in $HOST_CASES; do
         TOTAL=$((TOTAL + 1))
@@ -221,7 +227,7 @@ if [ "$ONLY_HOST_LOCAL" = 1 ]; then
         printf '\nmodulejail tests: %d/%d case(s) FAILED.\n' "$FAIL" "$TOTAL" >&2
         exit 1
     fi
-    printf '\nmodulejail tests: %d/%d case(s) PASSED.\n' "$TOTAL" "$TOTAL"
+    printf '\nmodulejail tests: %d/%d case(s) PASSED, %d SKIPPED.\n' "$((TOTAL - SKIP))" "$TOTAL" "$SKIP"
     exit 0
 fi
 
@@ -242,6 +248,7 @@ fi
 
 # Unified counters for the combined host-local + container layers.
 FAIL=0
+SKIP=0
 TOTAL=0
 
 # --- Host-local layer (always runs) --------------------------------------
@@ -261,11 +268,15 @@ else
     for case_file in $HOST_CASES; do
         TOTAL=$((TOTAL + 1))
         printf '\n-- %s --\n' "$case_file"
-        if sh "$case_file"; then
-            : # case prints its own [name] PASS line
-        else
-            FAIL=$((FAIL + 1))
-        fi
+        set +e
+        sh "$case_file"
+        rc=$?
+        set -e
+        case $rc in
+            0)  : ;;                          # case prints its own [name] PASS line
+            77) SKIP=$((SKIP + 1)) ;;         # autoconf/TAP "skip" convention
+            *)  FAIL=$((FAIL + 1)) ;;
+        esac
     done
 fi
 
@@ -296,4 +307,4 @@ if [ "$FAIL" -gt 0 ]; then
     exit 1
 fi
 
-printf '\nmodulejail tests: %d/%d case(s) PASSED.\n' "$TOTAL" "$TOTAL"
+printf '\nmodulejail tests: %d/%d case(s) PASSED, %d SKIPPED.\n' "$((TOTAL - SKIP))" "$TOTAL" "$SKIP"

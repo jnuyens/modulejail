@@ -978,11 +978,10 @@ Run it on a Linux host with Docker or Podman.
 
 Both harnesses are shellcheck-clean (`shellcheck --shell=sh`).
 
-Host-local cases include NixOS-specific tests (`nixos-detection.sh`,
-`nixos-nix-syntax-output.sh`) that verify the Nix store module path
-detection and the Nix expression output format. These tests run on any
-Linux host but exercise NixOS code paths by setting `MODULEJAIL_ON_NIXOS=1`
-in the test environment.
+Host-local cases include a NixOS-specific test (`nixos-nix-output.sh`)
+that verifies the kernel module path detection and Nix expression output
+format. The test runs on any Linux host but exercises NixOS code paths by
+setting `MODULEJAIL_ON_NIXOS=1` in the test environment.
 
 ## Star History
 

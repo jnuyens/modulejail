@@ -1520,7 +1520,8 @@ emit_nix_line() {
 
 # render_blacklist_file: write the 8-line header block followed by all
 # install directives to stdout. Callers redirect stdout to the desired
-# destination (a tempfile for the real-write path, stderr for dry-run). # Using a single function for both paths removes the duplication that
+# destination (a tempfile for the real-write path, stderr for dry-run).
+# Using a single function for both paths removes the duplication that
 # previously made drift between the two branches a silent regression risk.
 # All referenced variables (VERSION, profile, _kver, fingerprint,
 # USE_LOGGER, FAIL_ON_MODULE_LOAD, invocation, blacklist) are resolved at

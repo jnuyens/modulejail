@@ -147,6 +147,40 @@ makepkg -si
 
 AUR package: <https://aur.archlinux.org/packages/modulejail>
 
+On NixOS, ModuleJail generates a Nix expression instead of
+a `modprobe.d` blacklist. The output is a Nix module that can be imported
+into your `configuration.nix`:
+
+```nix
+{ config, pkgs, ... }:
+{
+  imports = [
+    ./modulejail-blacklist.nix
+  ];
+}
+```
+
+The default output path on NixOS is `/etc/nixos/modulejail-blacklist.nix`.
+
+The generated module emits **two** enforcement mechanisms side by side:
+
+1. `boot.blacklistedKernelModules` - covers alias-resolution autoload
+   (the path the kernel uses for socket-family `request_module`, e.g.
+   `socket(AF_SCTP, ...)` triggering an `sctp` load).
+2. `boot.extraModprobeConfig` - emits the same logger install line
+   modulejail emits on `modprobe.d`-based distros, which intercepts
+   explicit `modprobe <name>` and direct-name `request_module()` calls
+   and produces a syslog event tagged `modulejail` on every blocked
+   load attempt (`journalctl -t modulejail`). The logger path baked
+   into the install lines defaults to `/run/current-system/sw/bin/logger`
+   (util-linux); override with `MODULEJAIL_LOGGER_PATH` at generation
+   time. If logger is missing at modprobe-time, the install line's
+   trailing `; exit 0` still neutralizes the load attempt; only the
+   syslog event is lost.
+
+This brings the NixOS path to enforcement-and-observability parity with
+the `modprobe.d` path on every other supported distro.
+
 For Debian: @kapouer (Jérémy Lal) is packaging modulejail for the
 official Debian archive - tracked in Debian BTS as
 [ITP #1138266](https://bugs.debian.org/1138266) (filed 2026-05-30,
@@ -279,10 +313,14 @@ additional loaded module is additional latent attack surface for the next
 disclosed CVE. ModuleJail's model is simple: if it is not loaded today on a
 steady-state host, blacklist it.
 
-The script is portable across Debian/Ubuntu, RHEL/Rocky, Arch, Alpine, and
-SUSE families. It has no runtime dependencies beyond `awk`, `comm`, `find`,
-`sha256sum`, and standard coreutils, all present in every base Linux install
-including busybox.
+The script is portable across Debian/Ubuntu, RHEL/Rocky, Arch, Alpine,
+SUSE, and **NixOS** families. It has no runtime dependencies beyond `awk`,
+`comm`, `find`, `sha256sum`, and standard coreutils, all present in every
+base Linux install including busybox. On NixOS, it automatically detects
+the Nix store kernel module path and outputs a Nix expression with both
+`boot.blacklistedKernelModules` (alias-resolution autoload) and
+`boot.extraModprobeConfig` (install-line interception with syslog audit)
+instead of a `modprobe.d` blacklist file.
 
 ## The safety model
 
@@ -728,6 +766,7 @@ Environment variables:
 | `MODULEJAIL_LOGGER_PATH` | Path to the logger binary for syslog install-line detection (default: `/usr/bin/logger`) |
 | `MODULEJAIL_DEFAULT_WHITELIST_FILE` | Override the auto-detected whitelist path (default: `/etc/modulejail/whitelist.conf`) |
 | `MODULEJAIL_INITRAMFS_BUILDER` | Force the initramfs builder detection used by `--install-initramfs-hook` / `--uninstall-initramfs-hook` to one of `dracut`, `initramfs-tools`, `mkinitcpio`. Test-only plumbing (since v1.4) |
+| `MODULEJAIL_ON_NIXOS` | Force NixOS mode (`1`) or non-NixOS mode (`0`). When set to `1`, generates Nix expression syntax with `boot.blacklistedKernelModules`. When set to `0`, forces traditional `modprobe.d` output even on NixOS. Test-only plumbing. Auto-detected from `/run/booted_system` or `/etc/os-release` when unset (since v1.5) |
 
 ## Exit codes
 
@@ -796,6 +835,7 @@ ModuleJail has been verified across two confidence tiers.
 | Debian GNU/Linux 13.4 (trixie) | 6.12.74+deb13+1-amd64 | PASS (4091 of 4227 modules blacklisted) |
 | Rocky Linux 9.7 (Blue Onyx) | 5.14.0-503.35.1.el9_5.x86_64 | PASS (2253 of 2338 modules blacklisted) |
 | Arch Linux (rolling, 2026-05-23) | 7.0.9-arch2-1 | PASS (6416 of 6481 modules blacklisted) |
+| **NixOS 26.05** | 6.18.34 | **PASS** (7002 of 7296 modules blacklisted, Nix expression output) |
 
 Note for Rocky/RHEL hosts: on hosts with strict SELinux enforcement,
 non-root execution may encounter a `find` permission denial on
@@ -957,6 +997,11 @@ that is the documented graceful degradation (autoconf/TAP skip convention).
 Run it on a Linux host with Docker or Podman.
 
 Both harnesses are shellcheck-clean (`shellcheck --shell=sh`).
+
+Host-local cases include a NixOS-specific test (`nixos-nix-output.sh`)
+that verifies the kernel module path detection and Nix expression output
+format. The test runs on any Linux host but exercises NixOS code paths by
+setting `MODULEJAIL_ON_NIXOS=1` in the test environment.
 
 ## Star History
 

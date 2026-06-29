@@ -5,6 +5,29 @@ All notable changes to ModuleJail are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+Initial NixOS support (#22 by @DasGruene) plus install-line enforcement
+parity on the NixOS path.
+
+### Added
+
+- **NixOS detection and Nix-expression output** (#22, @DasGruene): the
+  script auto-detects NixOS via `/run/booted-system`, `/run/current-system`,
+  or `/etc/os-release` and emits a Nix module instead of a
+  `modprobe.d`-style file. Default output path on NixOS is
+  `/etc/nixos/modulejail-blacklist.nix`.
+- **NixOS install-line enforcement**: the generated module now emits
+  `boot.extraModprobeConfig` with the same `install <name> /bin/sh -c
+  '<logger> -t modulejail "blocked: <name>" 2>/dev/null; exit 0'` lines
+  modulejail emits on `modprobe.d`-based distros, alongside
+  `boot.blacklistedKernelModules`. This closes two gaps versus blacklist-only:
+  explicit `modprobe <name>` and direct-name `request_module()` are now
+  blocked (not just alias-resolution autoload), and every blocked load
+  attempt produces a `journalctl -t modulejail` event. The NixOS logger
+  path defaults to `/run/current-system/sw/bin/logger`; override at
+  generation time with `MODULEJAIL_LOGGER_PATH`.
+
 ## [1.4.3] - 2026-06-20
 
 Bug-fix release for a man page lint warning. RHEL / Arch / Debian /

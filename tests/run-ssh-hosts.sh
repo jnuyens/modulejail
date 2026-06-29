@@ -151,9 +151,11 @@ run_host() {
     printf '[%s] fingerprint: %s\n' "$host" "$fp"
 
     # 10. Portability grep assertion on the script that was copied over.
+    # Leading `grep -v nixos` strips the NixOS detection block; see the
+    # parallel comment in tests/lib/run-in-fixture.sh for rationale.
     printf '\n-- [%s] (10) no per-distro branches --\n' "$host"
     set +e
-    ssh "$host" "grep -nE '/etc/os-release|/etc/lsb-release|/etc/redhat-release|/etc/debian_version|ID_LIKE|ID=ubuntu|ID=debian|ID=rhel|ID=fedora|ID=arch|ID=alpine|ID=opensuse' /tmp/mj-test"
+    ssh "$host" "grep -v nixos /tmp/mj-test | grep -nE '/etc/os-release|/etc/lsb-release|/etc/redhat-release|/etc/debian_version|ID_LIKE|ID=ubuntu|ID=debian|ID=rhel|ID=fedora|ID=arch|ID=alpine|ID=opensuse'"
     grc=$?
     set -e
     # grep returns 1 when there are NO matches — exactly what we want.

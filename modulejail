@@ -65,7 +65,7 @@ SELF_UPDATE=0
 # Overridable via MODULEJAIL_ON_NIXOS for test fixtures (test-only).
 #   0 = not NixOS (explicit override, skips system detection)
 #   1 = is NixOS (explicit override, skips system detection)
-#   unset = auto-detect from /run/booted-system or /etc/os-release
+#   unset = auto-detect from /run/booted-system or /etc/os-release ID=nixos
 ON_NIXOS="${MODULEJAIL_ON_NIXOS:-}"
 if [ -z "$ON_NIXOS" ]; then
     if [ -L /run/booted-system ] || [ -L /run/current-system ]; then

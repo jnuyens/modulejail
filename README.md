@@ -162,6 +162,25 @@ into your `configuration.nix`:
 
 The default output path on NixOS is `/etc/nixos/modulejail-blacklist.nix`.
 
+The generated module emits **two** enforcement mechanisms side by side:
+
+1. `boot.blacklistedKernelModules` - covers alias-resolution autoload
+   (the path the kernel uses for socket-family `request_module`, e.g.
+   `socket(AF_SCTP, ...)` triggering an `sctp` load).
+2. `boot.extraModprobeConfig` - emits the same logger install line
+   modulejail emits on `modprobe.d`-based distros, which intercepts
+   explicit `modprobe <name>` and direct-name `request_module()` calls
+   and produces a syslog event tagged `modulejail` on every blocked
+   load attempt (`journalctl -t modulejail`). The logger path baked
+   into the install lines defaults to `/run/current-system/sw/bin/logger`
+   (util-linux); override with `MODULEJAIL_LOGGER_PATH` at generation
+   time. If logger is missing at modprobe-time, the install line's
+   trailing `; exit 0` still neutralizes the load attempt; only the
+   syslog event is lost.
+
+This brings the NixOS path to enforcement-and-observability parity with
+the `modprobe.d` path on every other supported distro.
+
 For Debian: @kapouer (Jérémy Lal) is packaging modulejail for the
 official Debian archive - tracked in Debian BTS as
 [ITP #1138266](https://bugs.debian.org/1138266) (filed 2026-05-30,
@@ -298,9 +317,10 @@ The script is portable across Debian/Ubuntu, RHEL/Rocky, Arch, Alpine,
 SUSE, and **NixOS** families. It has no runtime dependencies beyond `awk`,
 `comm`, `find`, `sha256sum`, and standard coreutils, all present in every
 base Linux install including busybox. On NixOS, it automatically detects
-the Nix store kernel module path and outputs a Nix expression
-(`boot.blacklistedKernelModules = [ ... ];`) instead of a `modprobe.d`
-blacklist file.
+the Nix store kernel module path and outputs a Nix expression with both
+`boot.blacklistedKernelModules` (alias-resolution autoload) and
+`boot.extraModprobeConfig` (install-line interception with syslog audit)
+instead of a `modprobe.d` blacklist file.
 
 ## The safety model
 

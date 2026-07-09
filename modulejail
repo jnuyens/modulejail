@@ -1077,10 +1077,13 @@ if [ -L "$output" ]; then
 fi
 
 # --- Pre-flight: writability gate (before any heavy work) ---
-target_dir=$(dirname "$output")
-if ! [ -w "$target_dir" ]; then
-    printf 'modulejail: error: cannot write to %s (try sudo, or use -o <other-path>)\n' "$target_dir" >&2
-    exit $EX_NOPERM
+# Skip on --dry-run since we won't actually write.
+if [ "$DRY_RUN" -eq 0 ]; then
+    target_dir=$(dirname "$output")
+    if ! [ -w "$target_dir" ]; then
+        printf 'modulejail: error: cannot write to %s (try sudo, or use -o <other-path>)\n' "$target_dir" >&2
+        exit $EX_NOPERM
+    fi
 fi
 
 # === PIPELINE ===

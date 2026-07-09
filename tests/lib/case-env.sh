@@ -62,7 +62,11 @@ MODULEJAIL_NO_UPDATE_CHECK=1
 # that may exist on a developer's machine or a CI runner. Cases that want
 # to exercise the default-detection path override this themselves.
 MODULEJAIL_DEFAULT_WHITELIST_FILE=$CASE_TMP/default-whitelist-absent.conf
-export MODULEJAIL_NO_UPDATE_CHECK MODULEJAIL_DEFAULT_WHITELIST_FILE
+# Disable NixOS detection by default for tests, so existing tests that expect
+# modprobe.d output still work on NixOS systems. NixOS-specific tests can
+# override this by setting MODULEJAIL_ON_NIXOS=1.
+MODULEJAIL_ON_NIXOS=0
+export MODULEJAIL_NO_UPDATE_CHECK MODULEJAIL_DEFAULT_WHITELIST_FILE MODULEJAIL_ON_NIXOS
 
 # Convenience helpers --------------------------------------------------------
 

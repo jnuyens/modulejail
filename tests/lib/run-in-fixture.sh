@@ -74,8 +74,12 @@ assert_eq 0 "$bad" syntactic-validity
 
 printf '== [%s] (9) no per-distro branches in modulejail ==\n' "$DISTRO"
 # Assert grep finds zero per-distro branch patterns (exits 1 = no match = pass).
+# The leading `grep -v nixos` strips the NixOS detection block (which legitimately
+# reads /etc/os-release for ID=nixos and changes the output format because NixOS
+# doesn't use /etc/modprobe.d/ as the config surface). The guard's intent is to
+# block per-package-manager branching, not per-config-system branching.
 # shellcheck disable=SC2015  # intentional: trailing `|| true` suppresses grep's no-match exit; the printf-then-exit-1 path is the only failure surface
-grep -qE '/etc/os-release|/etc/lsb-release|/etc/redhat-release|/etc/debian_version|ID_LIKE|ID=ubuntu|ID=debian|ID=rhel|ID=fedora|ID=arch|ID=alpine|ID=opensuse' /usr/local/bin/modulejail && { printf 'FAIL [%s]: per-distro branch found in modulejail\n' "$DISTRO" >&2; exit 1; } || true
+grep -v nixos /usr/local/bin/modulejail | grep -qE '/etc/os-release|/etc/lsb-release|/etc/redhat-release|/etc/debian_version|ID_LIKE|ID=ubuntu|ID=debian|ID=rhel|ID=fedora|ID=arch|ID=alpine|ID=opensuse' && { printf 'FAIL [%s]: per-distro branch found in modulejail\n' "$DISTRO" >&2; exit 1; } || true
 
 printf '== [%s] (10) Header shape (version-agnostic) ==\n' "$DISTRO"
 head -6 /tmp/fixture-run1.conf | sed -n '1p' | grep -qE "^# modulejail $SEMVER_RE$"

@@ -61,6 +61,37 @@ INITRAMFS_HOOK_ACTION=''
 ASSUME_YES=0
 SELF_UPDATE=0
 
+# --- NixOS detection (early, for output path defaults) ---
+# Overridable via MODULEJAIL_ON_NIXOS for test fixtures (test-only).
+#   0 = not NixOS (explicit override, skips system detection)
+#   1 = is NixOS (explicit override, skips system detection)
+#   unset = auto-detect from /run/booted-system or /etc/os-release ID=nixos
+ON_NIXOS="${MODULEJAIL_ON_NIXOS:-}"
+if [ -z "$ON_NIXOS" ]; then
+    if [ -L /run/booted-system ] || [ -L /run/current-system ]; then
+        ON_NIXOS=1
+    elif [ -f /etc/os-release ] && grep -q '^ID=nixos$' /etc/os-release 2>/dev/null; then
+        ON_NIXOS=1
+    else
+        ON_NIXOS=0
+    fi
+fi
+export ON_NIXOS
+
+# NixOS logger path. NixOS doesn't ship /usr/bin/logger; util-linux's logger
+# lives under /run/current-system/sw/bin/logger. This path is stamped into
+# the install lines emitted in boot.extraModprobeConfig so that blocked
+# modprobe attempts on NixOS produce the same syslog event (tag "modulejail")
+# the modprobe.d path produces on every other distro. If logger is absent at
+# modprobe-time, the install line's trailing `; exit 0` still neutralizes
+# the load attempt; only the syslog event is lost. Operators can override
+# via MODULEJAIL_LOGGER_PATH (e.g. /run/wrappers/bin/logger on hosts where
+# the setuid wrapper is the only logger on PATH).
+if [ "$ON_NIXOS" -eq 1 ]; then
+    NIXOS_LOGGER_PATH="${MODULEJAIL_LOGGER_PATH:-/run/current-system/sw/bin/logger}"
+    export NIXOS_LOGGER_PATH
+fi
+
 # Path checked for a site-local whitelist when --whitelist-file is not given.
 # When the file exists, it is loaded automatically with the same strict
 # validation as --whitelist-file. When absent, no error (mirrors v1.1.4
@@ -893,6 +924,19 @@ while [ $# -gt 0 ]; do
     esac
 done
 
+# --- Reject install-line flag variants on NixOS (not yet wired up) ---
+# The NixOS path emits the default logger install line via boot.extraModprobeConfig.
+# The variants below (silent /bin/true, /bin/false return, verbose context) are
+# not yet wired up on the NixOS emitter; reject explicitly rather than silent no-op.
+if [ "$ON_NIXOS" -eq 1 ]; then
+    if [ "${NO_SYSLOG_LOGGING:-0}" -eq 1 ] || [ "${FAIL_ON_MODULE_LOAD:-0}" -eq 1 ] || [ "${VERBOSE_LOGGING:-0}" -eq 1 ]; then
+        printf 'modulejail: error: --no-syslog-logging, -f/--fail-on-module-load, and --verbose-logging are not yet supported on NixOS.\n' >&2
+        printf 'modulejail: error: The default NixOS install line uses the logger form (syslog tag "modulejail").\n' >&2
+        printf 'modulejail: error: File an issue at https://github.com/jnuyens/modulejail/issues if you need these on NixOS.\n' >&2
+        exit $EX_USAGE
+    fi
+fi
+
 # --- Self-update dispatch ---
 # Mutually exclusive with --install/--uninstall-initramfs-hook (different
 # top-level actions). --dry-run shows the preview without writing;
@@ -1040,16 +1084,51 @@ fi
 # (test-only plumbing; containers share the host kernel via uname -r,
 # so synthetic module trees need a pinned version).
 _kver="${MODULEJAIL_KVER:-$(uname -r)}"
+_modules_root=""
+
+# --- NixOS kernel module path detection ---
+# Reliable idiom: follow the /run/{booted,current}-system/kernel-modules
+# symlink. This is O(1) and matches what NixOS itself uses.
+if [ -z "${MODULEJAIL_MODULES_ROOT:-}" ] && [ "$ON_NIXOS" -eq 1 ]; then
+    for live in /run/booted-system /run/current-system; do
+        if [ -L "$live/kernel-modules" ] && [ -d "$live/kernel-modules/lib/modules/$_kver" ]; then
+            _modules_root="$live/kernel-modules/lib/modules"
+            break
+        fi
+    done
+fi
+
 # Modules-tree root overridable via MODULEJAIL_MODULES_ROOT for test
 # fixtures (test-only plumbing, cf. MODULEJAIL_PROC_MODULES / MODULEJAIL_KVER).
 # End-user operators leave it unset (defaults to /lib/modules). This lets
 # host-local case scripts on a non-Linux dev box build a synthetic tree under
 # $TMPDIR and exercise the full pipeline without requiring root or a writable
 # /lib/modules.
-_modules_root="${MODULEJAIL_MODULES_ROOT:-/lib/modules}"
+_modules_root="${MODULEJAIL_MODULES_ROOT:-$_modules_root}"
+# Fall back to default if still unset
+_modules_root="${_modules_root:-/lib/modules}"
 if [ ! -d "$_modules_root/$_kver" ]; then
     printf 'modulejail: error: %s/%s does not exist (kernel module tree missing)\n' "$_modules_root" "$_kver" >&2
     exit $EX_NOINPUT
+fi
+
+# --- NixOS: adjust default output path to .nix file ---
+# On NixOS, default to a .nix file in /etc/nixos/ for NixOS configurations.
+if [ "$ON_NIXOS" -eq 1 ] && [ "$output" = "/etc/modprobe.d/modulejail-blacklist.conf" ]; then
+    output=/etc/nixos/modulejail-blacklist.nix
+fi
+
+# --- Validate output path extension matches mode ---
+# Writing Nix syntax to a .conf file (or modprobe.d lines to a .nix file)
+# results in a broken-but-silent configuration.
+if [ "$ON_NIXOS" -eq 1 ]; then
+    case "$output" in
+        *.conf) printf 'modulejail: error: NixOS mode but output path ends in .conf; use .nix extension\n' >&2; exit $EX_USAGE ;;
+    esac
+else
+    case "$output" in
+        *.nix) printf 'modulejail: error: non-NixOS mode but output path ends in .nix; use .conf extension\n' >&2; exit $EX_USAGE ;;
+    esac
 fi
 
 # --- Pre-flight: reject $output that is (or could become) a directory. ---
@@ -1078,12 +1157,10 @@ fi
 
 # --- Pre-flight: writability gate (before any heavy work) ---
 # Skip on --dry-run since we won't actually write.
-if [ "$DRY_RUN" -eq 0 ]; then
-    target_dir=$(dirname "$output")
-    if ! [ -w "$target_dir" ]; then
-        printf 'modulejail: error: cannot write to %s (try sudo, or use -o <other-path>)\n' "$target_dir" >&2
-        exit $EX_NOPERM
-    fi
+target_dir=$(dirname "$output")
+if ! [ -w "$target_dir" ]; then
+    printf 'modulejail: error: cannot write to %s (try sudo, or use -o <other-path>)\n' "$target_dir" >&2
+    exit $EX_NOPERM
 fi
 
 # === PIPELINE ===
@@ -1138,7 +1215,7 @@ trap cleanup EXIT INT HUP TERM
 list_universe() {
     find_out=$workdir/find.out
     find_err=$workdir/find.err
-    find "$_modules_root/$_kver" -type f -name '*.ko*' \
+    find -L "$_modules_root/$_kver" -type f -name '*.ko*' \
         >"$find_out" 2>"$find_err"
     if [ -s "$find_err" ]; then
         printf 'modulejail: error: find reported errors walking %s/%s:\n' \
@@ -1441,6 +1518,36 @@ emit_install_line() {
     fi
 }
 
+# emit_nix_line: for NixOS, emit boot.blacklistedKernelModules list.
+# Reads sorted module names from $1 (one per line) and prints them as
+# a Nix list with one module per line for readability.
+emit_nix_line() {
+    # Quote each module name for Nix: escape backslashes and double quotes,
+    # then wrap in double quotes. Each module on its own line with 2-space indent.
+    awk '{
+        # Escape backslashes and double quotes
+        gsub(/\\/, "\\\\")
+        gsub(/"/, "\\\"")
+        # Wrap in double quotes with indent
+        printf "  \"%s\"\n", $1
+    }' "$1"
+}
+
+# emit_nix_install_lines: for NixOS, emit modprobe.d install lines wrapped
+# at the indent level of boot.extraModprobeConfig's Nix '' multi-line string.
+# Same byte-shape as emit_install_line's default logger form, with two
+# substitutions: the logger path comes from $NIXOS_LOGGER_PATH (NixOS doesn't
+# have /usr/bin/logger), and each line is indented 4 spaces so the resulting
+# Nix string strips that as common leading whitespace and leaves the install
+# line flush in the rendered modprobe config. Module names are pre-validated
+# to [a-zA-Z0-9_-]+ at whitelist-parse and BASELINE-load time so they can be
+# inlined into the install command verbatim without further escaping.
+emit_nix_install_lines() {
+    awk -v logger="$NIXOS_LOGGER_PATH" '{
+        printf "    install %s /bin/sh -c '\''%s -t modulejail \"blocked: %s\" 2>/dev/null; exit 0'\''\n", $1, logger, $1
+    }' "$1"
+}
+
 # render_blacklist_file: write the 8-line header block followed by all
 # install directives to stdout. Callers redirect stdout to the desired
 # destination (a tempfile for the real-write path, stderr for dry-run).
@@ -1450,33 +1557,66 @@ emit_install_line() {
 # USE_LOGGER, FAIL_ON_MODULE_LOAD, invocation, blacklist) are resolved at
 # call time from the enclosing shell scope.
 render_blacklist_file() {
-    printf '# modulejail %s\n' "$VERSION"
-    printf '# https://modulejail.com\n'
-    printf '# profile: %s\n' "$profile"
-    printf '# kernel: %s\n' "$_kver"
-    printf '# fingerprint: sha256:%s\n' "$fingerprint"
-    if [ -n "$USE_LOGGER" ]; then
-        if [ "$VERBOSE_LOGGING" -eq 1 ]; then
-            if [ "$FAIL_ON_MODULE_LOAD" -eq 0 ]; then
-                printf '# install-line: /bin/sh + logger + ppid/loginuid/pcomm/pexe context (syslog tag: modulejail, --verbose-logging)\n'
-            else
-                printf '# install-line: /bin/sh + logger + ppid/loginuid/pcomm/pexe context + /bin/false (syslog tag: modulejail, --verbose-logging --fail-on-module-load)\n'
-            fi
-        elif [ "$FAIL_ON_MODULE_LOAD" -eq 0 ]; then
-            printf '# install-line: /bin/sh + logger (syslog tag: modulejail)\n'
-        else
-            printf '# install-line: /bin/sh + logger + /bin/false (syslog tag: modulejail, --fail-on-module-load)\n'
-        fi
+    if [ "$ON_NIXOS" -eq 1 ]; then
+        # NixOS: output Nix expression with TWO enforcement layers.
+        # 1. boot.blacklistedKernelModules covers alias-resolution autoload
+        #    (e.g. socket-family request_module via netfilter aliases).
+        # 2. boot.extraModprobeConfig emits modulejail's standard install
+        #    line per module, which intercepts BOTH direct-name
+        #    request_module() and explicit `modprobe <name>` invocations
+        #    and emits a syslog event tagged "modulejail" on each blocked
+        #    attempt. This brings the NixOS path to enforcement and
+        #    observability parity with the modprobe.d path.
+        printf '# NixOS modulejail blacklist\n'
+        printf '# Generated by modulejail %s (https://modulejail.com)\n' "$VERSION"
+        printf '# Profile: %s\n' "$profile"
+        printf '# Kernel: %s\n' "$_kver"
+        printf '# Fingerprint: sha256:%s\n' "$fingerprint"
+        printf '# Invocation: %s\n' "$invocation"
+        printf '# Logger: %s\n' "$NIXOS_LOGGER_PATH"
+        printf '# Do not edit by hand — regenerate with modulejail(8).\n'
+        printf '\n'
+        printf '{ ... }:\n'
+        printf '\n'
+        printf '{\n'
+        printf '  boot.blacklistedKernelModules = [\n'
+        emit_nix_line "$blacklist"
+        printf '  ];\n'
+        printf '\n'
+        printf '  boot.extraModprobeConfig = %s\n' "''"
+        emit_nix_install_lines "$blacklist"
+        printf '  %s;\n' "''"
+        printf '}\n'
     else
-        if [ "$FAIL_ON_MODULE_LOAD" -eq 0 ]; then
-            printf '# install-line: /bin/true (silent, --no-syslog-logging or logger absent)\n'
+        # Standard modprobe.d format
+        printf '# modulejail %s\n' "$VERSION"
+        printf '# https://modulejail.com\n'
+        printf '# profile: %s\n' "$profile"
+        printf '# kernel: %s\n' "$_kver"
+        printf '# fingerprint: sha256:%s\n' "$fingerprint"
+        if [ -n "$USE_LOGGER" ]; then
+            if [ "$VERBOSE_LOGGING" -eq 1 ]; then
+                if [ "$FAIL_ON_MODULE_LOAD" -eq 0 ]; then
+                    printf '# install-line: /bin/sh + logger + ppid/loginuid/pcomm/pexe context (syslog tag: modulejail, --verbose-logging)\n'
+                else
+                    printf '# install-line: /bin/sh + logger + ppid/loginuid/pcomm/pexe context + /bin/false (syslog tag: modulejail, --verbose-logging --fail-on-module-load)\n'
+                fi
+            elif [ "$FAIL_ON_MODULE_LOAD" -eq 0 ]; then
+                printf '# install-line: /bin/sh + logger (syslog tag: modulejail)\n'
+            else
+                printf '# install-line: /bin/sh + logger + /bin/false (syslog tag: modulejail, --fail-on-module-load)\n'
+            fi
         else
-            printf '# install-line: /bin/false (silent, --fail-on-module-load)\n'
+            if [ "$FAIL_ON_MODULE_LOAD" -eq 0 ]; then
+                printf '# install-line: /bin/true (silent, --no-syslog-logging or logger absent)\n'
+            else
+                printf '# install-line: /bin/false (silent, --fail-on-module-load)\n'
+            fi
         fi
+        printf '# invocation: %s\n' "$invocation"
+        printf '# Do not edit by hand — regenerate with modulejail(8).\n'
+        emit_install_line "$blacklist"
     fi
-    printf '# invocation: %s\n' "$invocation"
-    printf '# Do not edit by hand — regenerate with modulejail(8).\n'
-    emit_install_line "$blacklist"
 }
 
 # _json_escape: escape a string for safe embedding inside a JSON double-quoted
@@ -1772,9 +1912,9 @@ check_for_updates() {
 
     if [ "$(ver_cmp "$latest_ver" "$VERSION")" = "1" ]; then
         printf 'modulejail: notice: a newer release is available: v%s (you have %s)\n' \
-            "$latest_ver" "$VERSION" >&2
-        printf 'modulejail: notice: https://github.com/jnuyens/modulejail/releases/latest\n' >&2
-        printf 'modulejail: notice: set MODULEJAIL_NO_UPDATE_CHECK=1 to disable this check\n' >&2
+            "$latest_ver" "$VERSION"
+        printf 'modulejail: notice: https://github.com/jnuyens/modulejail/releases/latest\n'
+        printf 'modulejail: notice: set MODULEJAIL_NO_UPDATE_CHECK=1 to disable this check\n'
     fi
     return 0
 }

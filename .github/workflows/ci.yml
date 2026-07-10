@@ -69,3 +69,11 @@ jobs:
         run: sudo apt-get update -qq && sudo apt-get install -y mandoc
       - name: Run host-local cases
         run: sh tests/run-fixtures.sh --only-host-local
+
+  nix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: DeterminateSystems/nix-installer-action@main
+      - name: nix flake check
+        run: nix flake check --print-build-logs

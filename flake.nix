@@ -14,7 +14,7 @@
         let
           lines = nixpkgs.lib.splitString "\n" (builtins.readFile ./modulejail);
           verLine = builtins.head (builtins.filter (nixpkgs.lib.hasPrefix "VERSION='") lines);
-          m = builtins.match "VERSION='([^']+)'" verLine;
+          m = builtins.match "VERSION='([^']+)'.*" verLine;
         in
         builtins.head m;
 

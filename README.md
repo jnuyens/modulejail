@@ -147,6 +147,30 @@ makepkg -si
 
 AUR package: <https://aur.archlinux.org/packages/modulejail>
 
+### Install on NixOS via flake
+
+modulejail ships a flake. Run it without installing:
+
+```sh
+nix run github:jnuyens/modulejail -- --help
+```
+
+Or add it to a flake-based system config:
+
+```nix
+{
+  inputs.modulejail.url = "github:jnuyens/modulejail";
+
+  # in your system's module, expose the tool:
+  # environment.systemPackages = [ inputs.modulejail.packages.${pkgs.system}.default ];
+}
+```
+
+The flake wraps the tool with its runtime dependencies (kmod, gawk,
+coreutils, util-linux), so it runs on a minimal NixOS host without relying
+on the system PATH. The generated blacklist still targets the runtime logger
+at `/run/current-system/sw/bin/logger`.
+
 On NixOS, ModuleJail generates a Nix expression instead of
 a `modprobe.d` blacklist. The output is a Nix module that can be imported
 into your `configuration.nix`:

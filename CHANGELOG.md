@@ -27,6 +27,11 @@ parity on the NixOS path.
   attempt produces a `journalctl -t modulejail` event. The NixOS logger
   path defaults to `/run/current-system/sw/bin/logger`; override at
   generation time with `MODULEJAIL_LOGGER_PATH`.
+- **Nix flake packaging**: a root `flake.nix` exposes `packages.default`,
+  `apps.default` (`nix run github:jnuyens/modulejail`), a shellcheck +
+  build `checks.default`, and a dev shell. The tool is wrapped with its
+  runtime dependencies for minimal-host correctness. A non-required `nix`
+  CI job runs `nix flake check`.
 
 ## [1.4.3] - 2026-06-20
 

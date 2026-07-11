@@ -425,21 +425,21 @@ below the `BASELINE_DESKTOP` definition. Notable categories that
 **all three profiles** treat as blacklisted-by-default on hosts that
 are not actively using them:
 
-- **Network filesystems** — `cifs`, `nfs`, `nfsv3`, `nfsv4`, `ceph`,
+- **Network filesystems**: `cifs`, `nfs`, `nfsv3`, `nfsv4`, `ceph`,
   `fuse`, `9p`. Reachable via `mount(2)` with the matching fstype.
   CIFS additionally carries the `cifs.upcall` trust chain that
-  CIFSwitch (May 2026) exploits via `request_key("cifs.spnego", ...)`
-  — which fails with `-ENOKEY` when `cifs.ko` is not loaded.
+  CIFSwitch (May 2026) exploits via `request_key("cifs.spnego", ...)`,
+  which fails with `-ENOKEY` when `cifs.ko` is not loaded.
   Operators who mount SMB shares as CIFS clients should add `cifs` to
   their `WHITELIST=`. Samba (`smbd`) and `ksmbd` SERVERS do not need
   `cifs.ko` and should leave it blacklisted.
-- **Legacy / niche socket families** — `sctp`, `dccp`, `tipc`, `rds`,
+- **Legacy / niche socket families**: `sctp`, `dccp`, `tipc`, `rds`,
   `nfc`, `vsock`, `can`, `qrtr`, `smc`, `x25`, `ax25`, `decnet`,
   `ipx`, `appletalk`, `netrom`, `rose`, `llc2`. Reachable via
   `socket(AF_X, ...)` by any unprivileged user. Many distros already
   ship `blacklist net-pf-N` for the worst legacy ones; ModuleJail
   extends that to the whole class on hosts not using them.
-- **Crypto algorithm glue** — `algif_aead`, `algif_skcipher`,
+- **Crypto algorithm glue**: `algif_aead`, `algif_skcipher`,
   `algif_hash`, `algif_rng` (Copy Fail / CVE-2026-31431 is exactly
   this class) and the long tail of exotic algorithms (`aria`,
   `chacha20poly1305` standalone, `sm4`, `streebog`, `serpent`,
@@ -447,7 +447,7 @@ are not actively using them:
   `BASELINE_CONSERVATIVE` (`aes_generic`, `aesni_intel`, `xts`,
   `cbc`, `sha256_generic`) are kept because dm-crypt / WireGuard /
   kTLS use them.
-- **Other recent-CVE modules an operator is unlikely to need** —
+- **Other recent-CVE modules an operator is unlikely to need**:
   `rxe` (Soft-RoCE; CVE-2026-46133), `binfmt_aout`, `binfmt_em86`,
   `binfmt_flat`, niche `xt_*` netfilter helpers.
 
@@ -642,7 +642,7 @@ emitted; the header annotation is the only visible cue.
 By default, blacklisted module loads succeed silently: the generated
 install lines end with `exit 0` (when logger is present) or `/bin/true`
 (when it is not), so `modprobe <module>` returns 0 even though the module
-was not actually loaded. This is the safe default — it prevents
+was not actually loaded. This is the safe default: it prevents
 breakage in scripts and services that unconditionally call `modprobe`
 and check its return code.
 

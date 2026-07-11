@@ -37,7 +37,7 @@ while [ "$i" -le 50 ]; do
     i=$((i + 1))
 done
 
-# Fake /proc/modules — names that appear in the synthetic tree (so they
+# Fake /proc/modules: names that appear in the synthetic tree (so they
 # end up in the keep-set), plus the existing baseline entries are
 # automatically included by the script.
 {

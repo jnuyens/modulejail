@@ -1,5 +1,5 @@
 #!/bin/sh
-# Case: regression — SSH-host harness exit-code routing.
+# Case: regression, SSH-host harness exit-code routing.
 #
 # Drives tests/run-ssh-hosts.sh against a guaranteed-unreachable host
 # (the RFC 2606 `.invalid` TLD, which DNS resolvers MUST reject) and

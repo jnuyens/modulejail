@@ -771,7 +771,7 @@ every push / PR / tag). Single biggest release since v1.2.0.
 
 ### Added
 
-- An invocation header — can be copied and pasted for reproducible results.
+- An invocation header: can be copied and pasted for reproducible results.
 
 ## [1.2.3] - 2026-05-19
 
@@ -981,7 +981,7 @@ No new features, no UX changes.
   `/usr/bin/logger`.
 - New `MODULEJAIL_LOGGER_PATH` env-var override (test-only plumbing, parallel
   to `MODULEJAIL_PROC_MODULES` / `MODULEJAIL_KVER` / `MODULEJAIL_MODULES_ROOT`).
-- New `MODULEJAIL_MODULES_ROOT` env-var override (test-only plumbing) — lets
+- New `MODULEJAIL_MODULES_ROOT` env-var override (test-only plumbing): lets
   host-local test cases on non-Linux dev boxes exercise the full pipeline
   against a synthetic `/lib/modules` tree.
 - New `MODULEJAIL_DEFAULT_WHITELIST_FILE` env-var override (test-only plumbing)
@@ -1045,8 +1045,8 @@ No new features, no UX changes.
   scripts under `tests/cases/`; the default no-flag mode (full distro fixture
   matrix) is unchanged.
 - Header annotation does NOT enter the fingerprint computation (fingerprint
-  is a function of canonical inputs — kernel, profile, loaded, baseline,
-  whitelist — not render-time decisions). Two runs on identical inputs with
+  is a function of canonical inputs (kernel, profile, loaded, baseline,
+  whitelist), not render-time decisions). Two runs on identical inputs with
   different `--no-syslog-logging` states therefore produce different
   install-line bodies but the same `# fingerprint:` line, preserving the
   v1.0.0 fleet-correlation contract.
@@ -1054,8 +1054,8 @@ No new features, no UX changes.
 ### Drivers
 
 - GitHub [Issue #2](https://github.com/jnuyens/modulejail/issues/2)
-  (bpmartin20) — external whitelist persistence ask.
-- Vincent Homans (email feedback, 2026-05-13) — syslog visibility ask and
+  (bpmartin20): external whitelist persistence ask.
+- Vincent Homans (email feedback, 2026-05-13): syslog visibility ask and
   modprobe-override-scope clarification ask.
 
 ## [1.1.4] - 2026-05-13
@@ -1126,7 +1126,7 @@ No new features, no UX changes.
 - Three baseline profiles (`minimal`, `conservative`, `desktop`).
 - SemVer `VERSION` constant; sysexits.h-aligned exit codes
   (`64`, `66`, `70`, `71`, `73`, `77`).
-- Deterministic SHA-256 fingerprint header — byte-identical idempotency on
+- Deterministic SHA-256 fingerprint header: byte-identical idempotency on
   identical inputs.
 - Cross-distro support (Debian/Ubuntu, RHEL/Rocky/Fedora, Arch, Alpine,
   openSUSE) with no per-distro code branches.

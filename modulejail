@@ -108,7 +108,7 @@ DEFAULT_WHITELIST_FILE="${MODULEJAIL_DEFAULT_WHITELIST_FILE:-/etc/modulejail/whi
 
 # BASELINE_MINIMAL (16 entries):
 # Core filesystems, NLS deps for vfat/ESP, loop/overlay/autofs, crc32c/crc16.
-# Intent: "Won't break a box that's already booted" — safety net for hosts
+# Intent: "Won't break a box that's already booted." Safety net for hosts
 # where most drivers are compiled in but a few modular essentials remain.
 BASELINE_MINIMAL='ext4 xfs btrfs vfat fat nls_cp437 nls_iso8859_1 nls_utf8 tmpfs loop overlay autofs4 crc32c_generic crc32c_intel libcrc32c crc16'
 
@@ -125,7 +125,7 @@ BASELINE_CONSERVATIVE="$BASELINE_MINIMAL virtio virtio_ring virtio_pci virtio_bl
 # filesystems (exfat/f2fs/ntfs3/isofs), CPU EDAC, CPU power management
 # (intel_pstate/intel_cstate/amd_pstate), and TUN/TAP for VPN clients
 # and VMs.
-# Intent: "Laptop or workstation — won't break WiFi, BT, audio, video,
+# Intent: "Laptop or workstation: won't break WiFi, BT, audio, video,
 # CPU governors, or VPN/VM session setup."
 # shellcheck disable=SC2034  # referenced indirectly via the profile case statement
 BASELINE_DESKTOP="$BASELINE_CONSERVATIVE drm drm_kms_helper i915 amdgpu radeon nouveau nvidia ttm video backlight cfg80211 mac80211 iwlwifi iwlmvm iwldvm ath9k ath10k_core ath10k_pci ath11k brcmfmac brcmsmac rtw88_core rtw89_core rtl8xxxu bluetooth btusb btintel btrtl btbcm hci_uart snd snd_pcm snd_timer snd_hda_intel snd_hda_codec snd_hda_codec_realtek snd_hda_codec_hdmi snd_hda_codec_generic snd_usb_audio snd_seq xhci_hcd xhci_pci ehci_hcd ehci_pci uhci_hcd usblp cdc_acm joydev evdev videodev uvcvideo media exfat f2fs ntfs3 isofs cdrom mmc_core mmc_block rpmb_core amd64_edac i7core_edac ie31200_edac intel_pstate intel_cstate amd_pstate tun tap"
@@ -201,7 +201,7 @@ BASELINE_DESKTOP="$BASELINE_CONSERVATIVE drm drm_kms_helper i915 amdgpu radeon n
 #         (the pipeline normalizes - to _, so either form works).
 # Default: empty.
 #
-# Example (uncomment and adapt — `nft_compat` is the iptables-nft
+# Example (uncomment and adapt: `nft_compat` is the iptables-nft
 # compatibility shim, a plausible netfilter module a sysadmin running
 # iptables on a modern host might want to keep beyond the baseline):
 # WHITELIST='nft_compat xt_owner'
@@ -210,7 +210,7 @@ WHITELIST=''
 
 # --- usage(): print help text; caller decides exit code ---
 usage() {
-    printf 'modulejail — shrink a Linux host'\''s kernel-module attack surface\n'
+    printf 'modulejail: shrink a Linux host'\''s kernel-module attack surface\n'
     printf '\n'
     printf 'Usage: modulejail [OPTIONS]\n'
     printf '\n'
@@ -812,7 +812,7 @@ for arg in "$@"; do
     invocation="$invocation $(quote_arg "$arg")"
 done
 
-# --- Argument parser (manual case loop — POSIX, supports long options) ---
+# --- Argument parser (manual case loop, POSIX, supports long options) ---
 while [ $# -gt 0 ]; do
     case "$1" in
         -p|--profile)
@@ -1014,7 +1014,7 @@ fi
 #   - user did not pass --no-whitelist-file, AND
 #   - the default file exists.
 # Validation/permission gate inside parse_whitelist_file runs the same way
-# as for an explicit path — an existing but malformed/unsafe default file
+# as for an explicit path: an existing but malformed/unsafe default file
 # is a loud error, never a silent skip.
 if [ -z "$WHITELIST_FILE" ] && [ -z "$NO_WHITELIST_FILE" ] && [ -e "$DEFAULT_WHITELIST_FILE" ]; then
     WHITELIST_FILE="$DEFAULT_WHITELIST_FILE"
@@ -1132,7 +1132,7 @@ else
 fi
 
 # --- Pre-flight: reject $output that is (or could become) a directory. ---
-# Without this, `-o /etc/modprobe.d` (or any existing directory — easy slip
+# Without this, `-o /etc/modprobe.d` (or any existing directory, easy slip
 # with shell completion or a copy-paste from docs) would pass dirname, pass
 # the writability gate, and have `mv` quietly drop the temp file *inside*
 # the directory under its randomized name. modprobe ignores dotfiles, so
@@ -1165,7 +1165,7 @@ fi
 
 # === PIPELINE ===
 
-# Per-invocation work directory — all intermediate sorted files live here.
+# Per-invocation work directory: all intermediate sorted files live here.
 # Cleaned up on any exit path (success, failure, signal).
 # Use the explicit-template form rather than `mktemp -t modulejail.XXXXXX`:
 # the `-t` flag has three incompatible meanings across GNU coreutils, BSD,
@@ -1252,7 +1252,7 @@ list_universe() {
 }
 
 # list_loaded: read currently-loaded modules from /proc/modules.
-# Uses /proc/modules directly — no kmod/lsmod runtime dep.
+# Uses /proc/modules directly, no kmod/lsmod runtime dep.
 # Column 1 of /proc/modules is already in canonical underscore form.
 list_loaded() {
     # /proc/modules path overridable via MODULEJAIL_PROC_MODULES
@@ -1285,7 +1285,7 @@ list_baseline() {
         conservative) list=$BASELINE_CONSERVATIVE ;;
         desktop)      list=$BASELINE_DESKTOP ;;
     esac
-    # intentional word-splitting — BASELINE_* are POSIX space-separated lists, not bash arrays
+    # intentional word-splitting: BASELINE_* are POSIX space-separated lists, not bash arrays
     # shellcheck disable=SC2086
     for x in $list; do
         printf '%s\n' "$x"
@@ -1297,7 +1297,7 @@ list_baseline() {
 # list_whitelist: expand $WHITELIST into a sorted, deduplicated list of
 # canonical underscore module names. Parallel to list_baseline above.
 list_whitelist() {
-    # intentional word-splitting — WHITELIST is a POSIX space-separated list, not bash array
+    # intentional word-splitting: WHITELIST is a POSIX space-separated list, not bash array
     # shellcheck disable=SC2086
     for x in $WHITELIST; do
         printf '%s\n' "$x"
@@ -1574,7 +1574,7 @@ render_blacklist_file() {
         printf '# Fingerprint: sha256:%s\n' "$fingerprint"
         printf '# Invocation: %s\n' "$invocation"
         printf '# Logger: %s\n' "$NIXOS_LOGGER_PATH"
-        printf '# Do not edit by hand — regenerate with modulejail(8).\n'
+        printf '# Do not edit by hand. Regenerate with modulejail(8).\n'
         printf '\n'
         printf '{ ... }:\n'
         printf '\n'
@@ -1614,13 +1614,13 @@ render_blacklist_file() {
             fi
         fi
         printf '# invocation: %s\n' "$invocation"
-        printf '# Do not edit by hand — regenerate with modulejail(8).\n'
+        printf '# Do not edit by hand. Regenerate with modulejail(8).\n'
         emit_install_line "$blacklist"
     fi
 }
 
 # _json_escape: escape a string for safe embedding inside a JSON double-quoted
-# value. Handles \, ", and ASCII control characters (U+0000–U+001F). Output is
+# value. Handles \, ", and ASCII control characters (U+0000-U+001F). Output is
 # the escaped form of $1 on stdout (no surrounding quotes added by this helper;
 # the caller wraps in "…"). POSIX-portable: awk only. The ord[] table is
 # built in BEGIN by iterating the first 128 ASCII code points.
@@ -1777,7 +1777,7 @@ fingerprint=$(sha256sum < "$workdir/fingerprint.input" | awk '{print $1}')
 # target_dir already computed above (writability gate); reuse it. The
 # consolidated cleanup trap was installed earlier (right after $workdir)
 # and already knows about $tmp (initially empty), so the post-mktemp
-# assignment is atomic from the trap's point of view — no signal window
+# assignment is atomic from the trap's point of view: no signal window
 # can orphan this dotfile in $target_dir.
 if [ "$DRY_RUN" -eq 1 ]; then
     # --dry-run: skip mktemp/chmod/mv entirely. Nothing touches $target_dir.

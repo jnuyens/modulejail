@@ -1,5 +1,5 @@
 #!/bin/sh
-# tests/run-ssh-hosts.sh — real-SSH-host acceptance for modulejail.
+# tests/run-ssh-hosts.sh: real-SSH-host acceptance for modulejail.
 #
 # Runs the modulejail smoke suite against three live Linux hosts via SSH:
 # ubuntu-wifi (Ubuntu 24.04, Debian/Ubuntu family),
@@ -13,7 +13,7 @@
 #   4. Bad-flag → EX_USAGE=64 check
 #   5. Directory-as-output → EX_CANTCREAT=73 check
 #   6. Successful run with -o /tmp/mj-host-run1.conf (non-root, write-to-/tmp;
-#      original methodology preserved — no risk to host /etc/modprobe.d/)
+#      original methodology preserved, no risk to host /etc/modprobe.d/)
 #   7. Idempotency: second run → cmp byte-identical
 #   8. Success-line shape regex check on the run-6 stdout
 #   9. Generated file header shape: line 1 = "# modulejail <VERSION>"
@@ -31,9 +31,9 @@
 # README's Cross-distro support section.
 #
 # Exit codes:
-#   0  — all hosts passed (or rocky9 surfaced documented EX_OSERR=71)
-#   1  — at least one host failed an assertion in an unexpected way
-#   2  — unable to reach one or more hosts (SSH connection failure)
+#   0  all hosts passed (or rocky9 surfaced documented EX_OSERR=71)
+#   1  at least one host failed an assertion in an unexpected way
+#   2  unable to reach one or more hosts (SSH connection failure)
 
 set -eu
 
@@ -158,7 +158,7 @@ run_host() {
     ssh "$host" "grep -v nixos /tmp/mj-test | grep -nE '/etc/os-release|/etc/lsb-release|/etc/redhat-release|/etc/debian_version|ID_LIKE|ID=ubuntu|ID=debian|ID=rhel|ID=fedora|ID=arch|ID=alpine|ID=opensuse'"
     grc=$?
     set -e
-    # grep returns 1 when there are NO matches — exactly what we want.
+    # grep returns 1 when there are NO matches: exactly what we want.
     [ "$grc" -eq 1 ] || { printf '[%s] FAIL: per-distro grep found matches (grep rc=%d)\n' "$host" "$grc" >&2; return 1; }
 
     SUMMARY="${SUMMARY}[$host] PASS (fingerprint: $fp)\n"

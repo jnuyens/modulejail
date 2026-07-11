@@ -825,7 +825,7 @@ modulejail is installed via package manager):
 .PP
 .RS
 .EX
-# /etc/modulejail/whitelist.conf — chmod 0644 (or stricter)
+# /etc/modulejail/whitelist.conf: chmod 0644 (or stricter)
 #
 # nft_compat
 # xt_owner

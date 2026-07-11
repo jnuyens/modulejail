@@ -1,5 +1,5 @@
 #!/bin/sh
-# tests/run-fixtures.sh — modulejail test harness (host-local + containers).
+# tests/run-fixtures.sh: modulejail test harness (host-local + containers).
 #
 # Invocation contract:
 #

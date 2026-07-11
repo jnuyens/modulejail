@@ -89,7 +89,7 @@ algorithm implementation.
 
 | Module class | Examples | Notable CVE |
 |---|---|---|
-| `algif_*` glue | `algif_skcipher`, `algif_hash`, `algif_aead`, `algif_rng` | **CVE-2026-31431 "Copy Fail"** — splice + AF_ALG → 4-byte arbitrary write to page-cache → setuid binary corruption → root |
+| `algif_*` glue | `algif_skcipher`, `algif_hash`, `algif_aead`, `algif_rng` | **CVE-2026-31431 "Copy Fail"**: splice + AF_ALG → 4-byte arbitrary write to page-cache → setuid binary corruption → root |
 | Cipher implementations | `aria`, `aegis128`, `chacha20poly1305`, `sm4`, `streebog`, `serpent`, `twofish`, `camellia`, `cast5/6`, `tea`, `tgr192`, `wp512` | Several OOB-read CVEs across the family |
 | Mode implementations | `cts`, `lrw`, `xcbc`, `vmac`, `pcrypt` | `pcrypt` parallel crypto; historical races |
 
@@ -602,14 +602,14 @@ or while investigating a verbose-logging entry that looks suspicious.
 
 ## Sources
 
-- [Copy Fail (CVE-2026-31431) — Wiz](https://www.wiz.io/blog/copyfail-cve-2026-31431-linux-privilege-escalation-vulnerability)
+- [Copy Fail (CVE-2026-31431), Wiz](https://www.wiz.io/blog/copyfail-cve-2026-31431-linux-privilege-escalation-vulnerability)
 - [CVE-2026-31431 Sysdig analysis (mitigation = install algif_aead /bin/false)](https://www.sysdig.com/blog/cve-2026-31431-copy-fail-linux-kernel-flaw-lets-local-users-gain-root-in-seconds)
 - [CIFSwitch - 19-year-old Linux CIFS trust-boundary bug (CIQ, May 2026)](https://ciq.com/blog/cifswitch-ai-19-year-bug)
-- [CVE-2025-21756 vsock UAF — SentinelOne](https://www.sentinelone.com/vulnerability-database/cve-2025-21756/)
+- [CVE-2025-21756 vsock UAF, SentinelOne](https://www.sentinelone.com/vulnerability-database/cve-2025-21756/)
 - [CVE-2025-40331 SCTP TOCTOU (NVD)](https://nvd.nist.gov/vuln/detail/CVE-2025-40331)
 - [TIPC remote RCE (CVE-2021-43267)](https://www.sentinelone.com/labs/tipc-remote-linux-kernel-heap-overflow-allows-arbitrary-code-execution/)
-- [User namespaces add 262% kernel attack surface — Edera](https://edera.dev/stories/user-namespaces-are-not-a-security-boundary)
-- [Linux kernel module autoloading — duasynt](https://duasynt.com/blog/linux-kernel-module-autoloading)
-- [Restricting automatic kernel-module loading — LWN](https://lwn.net/Articles/740455/)
+- [User namespaces add 262% kernel attack surface, Edera](https://edera.dev/stories/user-namespaces-are-not-a-security-boundary)
+- [Linux kernel module autoloading, duasynt](https://duasynt.com/blog/linux-kernel-module-autoloading)
+- [Restricting automatic kernel-module loading, LWN](https://lwn.net/Articles/740455/)
 - [Hardening Linux against netlink socket privesc](https://www.systemshardening.com/articles/linux/linux-netlink-socket-hardening/)
 - [xairy/linux-kernel-exploitation (curated index)](https://github.com/xairy/linux-kernel-exploitation)

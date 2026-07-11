@@ -1,11 +1,11 @@
 #!/bin/sh
-# Case: defense-in-depth regression — emit_install_line
+# Case: defense-in-depth regression, emit_install_line
 # input sanitization. Feeds adversarial filenames through the full
 # pipeline and asserts the generated /etc/modprobe.d/-format output
 # contains none of the adversarial characters in any install-line
 # module-name token, under BOTH the --no-syslog-logging form (v1.1.4
 # /bin/true body) AND the default logger form (where the threat
-# actually bites — unmatched quotes in module names would break shell
+# actually bites: unmatched quotes in module names would break shell
 # quoting at modprobe-eval time).
 #
 # Pre-fix, the universe walker only filtered by .ko* suffix and did
@@ -55,7 +55,7 @@ TREE_ROOT=$CASE_TMP/lib/modules/$CASE_KVER/kernel
 mkdir -p "$TREE_ROOT/fs" "$TREE_ROOT/net" "$TREE_ROOT/drivers" \
          "$TREE_ROOT/crypto" "$TREE_ROOT/evil"
 
-# Adversarial files — three distinct adversarial characters per the
+# Adversarial files: three distinct adversarial characters per the
 # threat model: single quote, dollar+text-that-looks-like-an-IFS-ref,
 # whitespace. Quoting carefully so the *shell* invoking touch passes
 # the literal bytes through to the filesystem.
@@ -99,7 +99,7 @@ while [ "$i" -le 50 ]; do
     i=$((i + 1))
 done
 
-# Synthetic /proc/modules — a handful of canonical names so list_loaded
+# Synthetic /proc/modules: a handful of canonical names so list_loaded
 # is non-empty. None of the adversarial names appear here (they would
 # never appear in real /proc/modules; the kernel only exposes canonical
 # names). The list_loaded canonical-name filter is exercised by the absence-of-
@@ -125,7 +125,7 @@ assert_clean() {
 
     # Check 1: no single-quote or dollar character anywhere in an
     # install-line module-name token (field 2). Search the whole file
-    # first as a coarse net — if any of those characters appear
+    # first as a coarse net: if any of those characters appear
     # anywhere we want to know.
     if grep -nE "^install [^[:space:]]*['\$]" "$out" >"$CASE_TMP/grep.out"; then
         printf '[%s] FAIL: [%s] install-line module-name field contains shell-special char:\n' \
@@ -156,7 +156,7 @@ assert_clean() {
         # `evil'name` would not match here because the regex above is
         # alpha-only; the gsub(/-/, "_", n) gate also does not affect
         # single quotes or dollars. But the strings could match if
-        # the filter is partial — capture them explicitly.
+        # the filter is partial: capture them explicitly.
         :
     fi
     if grep -nE "\\\$IFS|evil'|with space" "$out" >"$CASE_TMP/lit.out"; then
@@ -185,7 +185,7 @@ MODULEJAIL_DEFAULT_WHITELIST_FILE=$CASE_TMP/default-whitelist-absent.conf \
 }
 assert_clean "$OUT1" "--no-syslog-logging"
 
-# Run 2: default logger form. The threat actually bites here — an
+# Run 2: default logger form. The threat actually bites here: an
 # unmatched single quote in field 2 would break the shell quoting of
 # the logger install-line body. We need /usr/bin/logger (or any
 # executable) at MODULEJAIL_LOGGER_PATH for the USE_LOGGER branch in

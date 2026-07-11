@@ -39,7 +39,7 @@ fi
 
 # vfio_pci IS in the universe (CASE_TREE plants it), is NOT in
 # /proc/modules (CASE_PROC omits it), is NOT in the baseline-conservative,
-# and was supposed to be added by the default file we just skipped — so
+# and was supposed to be added by the default file we just skipped, so
 # it MUST end up blacklisted.
 if ! grep -qE '^install vfio_pci ' "$OUT"; then
     case_fail "vfio_pci should be blacklisted (default file was skipped via --no-whitelist-file)"

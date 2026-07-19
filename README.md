@@ -81,6 +81,12 @@ curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.4.3/modulejai
 > **WARNING: convenient, not safe.** This pipes unverified bytes from the
 > network to a root shell. The safer alternative below is the recommended path.
 
+> [!IMPORTANT]
+> **Follow the [Golden Rule](#the-golden-rule): enable everything you need
+> first, then run ModuleJail.** Running it on a partial system can blacklist a
+> module you actually need (a locked encrypted drive, an unplugged USB device,
+> WiFi that is off). If that happens, it is a quick fix, not a lost system.
+
 > [!TIP]
 > **On a laptop or workstation? Add `-p desktop`.**
 >
@@ -103,6 +109,35 @@ by default. To use a different path:
 ```sh
 curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.4.3/modulejail | sudo sh -s -- -o /etc/modprobe.d/site-blacklist.conf
 ```
+
+## The Golden Rule
+
+**Enable everything you need first, then run ModuleJail to lock it down.**
+
+ModuleJail keeps exactly what is loaded when it runs and blacklists the rest.
+So before you run it, bring the host into the full configuration you actually
+use: mount your encrypted filesystems, plug in the USB devices you rely on,
+start every service, connect WiFi and Bluetooth. Whatever is live at that
+moment is preserved; whatever is absent is treated as unused and blacklisted.
+
+Forgot something? The recovery is the same short cycle, no reboot required:
+
+```sh
+# 1. Remove the blacklist
+sudo rm /etc/modprobe.d/modulejail-blacklist.conf
+# 2. Add the functionality you missed (mount the encrypted disk,
+#    re-attach the USB device, load the driver)
+# 3. Lock down again, now that everything you need is loaded
+sudo modulejail
+```
+
+ModuleJail re-reads the live module set on every run, so the second pass simply
+learns what the first one missed. For anything only needed occasionally, and
+therefore maybe not loaded when you run ModuleJail, pin it in the
+[sysadmin whitelist](#the-sysadmin-whitelist) or a
+[whitelist file](#site-local-whitelist-file) so it is kept unconditionally.
+A ready-made drop-in for encrypted removable drives ships at
+[`examples/whitelist-encryption.conf`](examples/whitelist-encryption.conf).
 
 ## The safer alternative
 

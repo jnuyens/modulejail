@@ -12,6 +12,24 @@ parity on the NixOS path.
 
 ### Added
 
+- **Desktop profile keeps the mainstream removable-encryption modules**
+  (reported by Michael Hiltz): `sha512_generic`, `essiv`, and
+  `dm_integrity` join `BASELINE_DESKTOP`. The aes/xts/sha256/dm_crypt
+  core was already inherited from `BASELINE_CONSERVATIVE`, so a standard
+  aes-xts LUKS drive already opened; these three close the remaining
+  mainstream cases (sha512 hash, LUKS1 essiv IV, LUKS2 authenticated
+  volumes) so an external encrypted drive that is locked when modulejail
+  runs still opens after a reboot on laptops/workstations. Exotic
+  disk-encryption modes (serpent, twofish, hctr2, adiantum, ...) remain
+  whitelist-only by policy; add the specific name to `WHITELIST` or
+  `/etc/modulejail/whitelist.conf`.
+- **"The Golden Rule" section in the README** plus an `[!IMPORTANT]`
+  callout in Quickstart: enable everything you need first, then run
+  ModuleJail; if you forget something, remove the blacklist, add the
+  functionality, and run it again (no reboot).
+- **`examples/whitelist-encryption.conf`**: a trimmable drop-in keep-set
+  for hosts that open encrypted removable drives which are locked when
+  ModuleJail runs.
 - **NixOS detection and Nix-expression output** (#22, @DasGruene): the
   script auto-detects NixOS via `/run/booted-system`, `/run/current-system`,
   or `/etc/os-release` and emits a Nix module instead of a

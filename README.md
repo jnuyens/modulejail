@@ -349,6 +349,15 @@ release on production hosts, and report the discrepancy upstream.
 > maintainer's machine; do NOT commit a real key ID into this README
 > (the placeholder is the published form).
 
+## Reporting security issues
+
+Found a way ModuleJail could fail open, be tampered with, or be abused by a
+local user? Report it privately through GitHub's
+[Report a vulnerability](https://github.com/jnuyens/modulejail/security)
+flow. A host that will not boot or a wrongly-blacklisted module is a normal
+[issue](https://github.com/jnuyens/modulejail/issues), not a security report.
+See [SECURITY.md](SECURITY.md) for the full policy.
+
 ## What ModuleJail is
 
 ModuleJail snapshots the set of currently loaded modules (`/proc/modules`) and

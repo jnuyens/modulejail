@@ -10,6 +10,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Initial NixOS support (#22 by @DasGruene) plus install-line enforcement
 parity on the NixOS path.
 
+### Changed
+
+- **`--install-initramfs-hook` composes with generation** (reported by
+  @richarddribeiro, #27): combined with generation flags (`-p`, `-o`,
+  `--whitelist-file`, ...) it now FIRST regenerates the blacklist with those
+  settings and THEN installs the hook, in one run. Previously the hook flag
+  was a standalone action that exited before generation, so
+  `modulejail -p desktop --install-initramfs-hook` silently ignored the
+  profile and whitelist. A bare `modulejail --install-initramfs-hook` (the
+  packaged postinst path) stays hook-only, so a package install/upgrade never
+  regenerates the blacklist on a non-steady-state host.
+
 ### Added
 
 - **Desktop profile keeps the mainstream removable-encryption modules**

@@ -60,6 +60,12 @@ OUTPUT_FORMAT=''
 INITRAMFS_HOOK_ACTION=''
 ASSUME_YES=0
 SELF_UPDATE=0
+# GEN_INTENT: set to 1 by the parser when any generation-defining flag
+# (-p, -o, --whitelist-file, --no-whitelist-file, --no-syslog-logging,
+# -f, --verbose-logging, --output-format) is passed. Lets a combined
+# --install-initramfs-hook compose with generation, while a bare hook
+# call (the packaged postinst path) stays hook-only.
+GEN_INTENT=0
 
 # --- NixOS detection (early, for output path defaults) ---
 # Overridable via MODULEJAIL_ON_NIXOS for test fixtures (test-only).
@@ -278,6 +284,11 @@ usage() {
     printf '                    their own time). Requires root. Pair with --dry-run\n'
     printf '                    to print what would be written without touching\n'
     printf '                    any file.\n'
+    printf '                    On its own this only installs the hook. Combined\n'
+    printf '                    with generation flags (-p, -o, --whitelist-file,\n'
+    printf '                    ...) it FIRST regenerates the blacklist with those\n'
+    printf '                    settings, THEN installs the hook. Example:\n'
+    printf '                    modulejail -p desktop --install-initramfs-hook\n'
     printf '  --uninstall-initramfs-hook\n'
     printf '                    Remove all four possible hook file paths regardless\n'
     printf '                    of which builder is currently detected (handles\n'
@@ -829,45 +840,55 @@ while [ $# -gt 0 ]; do
         -p|--profile)
             [ $# -ge 2 ] || { printf 'modulejail: error: %s requires an argument\n' "$1" >&2; exit $EX_USAGE; }
             profile=$2
+            GEN_INTENT=1
             shift 2
             ;;
         --profile=*)
             profile=${1#--profile=}
+            GEN_INTENT=1
             shift
             ;;
         -o|--output)
             [ $# -ge 2 ] || { printf 'modulejail: error: %s requires an argument\n' "$1" >&2; exit $EX_USAGE; }
             output=$2
+            GEN_INTENT=1
             shift 2
             ;;
         --output=*)
             output=${1#--output=}
+            GEN_INTENT=1
             shift
             ;;
         --whitelist-file)
             [ $# -ge 2 ] || { printf 'modulejail: error: --whitelist-file requires PATH argument\n' >&2; exit $EX_USAGE; }
             WHITELIST_FILE="$2"
+            GEN_INTENT=1
             shift 2
             ;;
         --whitelist-file=*)
             WHITELIST_FILE="${1#*=}"
             [ -n "$WHITELIST_FILE" ] || { printf 'modulejail: error: --whitelist-file= requires non-empty PATH\n' >&2; exit $EX_USAGE; }
+            GEN_INTENT=1
             shift
             ;;
         --no-whitelist-file)
             NO_WHITELIST_FILE=1
+            GEN_INTENT=1
             shift
             ;;
         --no-syslog-logging)
             NO_SYSLOG_LOGGING=1
+            GEN_INTENT=1
             shift
             ;;
         -f|--fail-on-module-load)
             FAIL_ON_MODULE_LOAD=1
+            GEN_INTENT=1
             shift
             ;;
         --verbose-logging)
             VERBOSE_LOGGING=1
+            GEN_INTENT=1
             shift
             ;;
         --dry-run)
@@ -886,11 +907,13 @@ while [ $# -gt 0 ]; do
         --output-format)
             [ $# -ge 2 ] || { printf 'modulejail: error: --output-format requires json or logfmt argument\n' >&2; exit $EX_USAGE; }
             OUTPUT_FORMAT="$2"
+            GEN_INTENT=1
             shift 2
             ;;
         --output-format=*)
             OUTPUT_FORMAT="${1#*=}"
             [ -n "$OUTPUT_FORMAT" ] || { printf 'modulejail: error: --output-format= requires non-empty argument (expected json or logfmt)\n' >&2; exit $EX_USAGE; }
+            GEN_INTENT=1
             shift
             ;;
         --install-initramfs-hook)
@@ -962,21 +985,37 @@ if [ "$SELF_UPDATE" -eq 1 ]; then
 fi
 
 # --- Initramfs hook install/uninstall dispatch ---
-# When --install-initramfs-hook or --uninstall-initramfs-hook is set,
-# take that action and exit. The action is orthogonal to blacklist
-# generation; all other flags (profile, whitelist, etc.) are ignored
-# in this mode. --dry-run is honored as "show what would happen."
+# --uninstall-initramfs-hook, and a BARE --install-initramfs-hook (no
+# generation flags), are standalone actions: take the action and exit,
+# ignoring profile/whitelist. This keeps the packaged postinst call
+# (`modulejail --install-initramfs-hook`) hook-only, so a package
+# install or upgrade never regenerates the blacklist on a host that is
+# not in steady state.
+#
+# When --install-initramfs-hook is combined with explicit generation
+# flags (GEN_INTENT=1, e.g. `-p desktop --install-initramfs-hook`), fall
+# through to the normal blacklist generation and install the hook AFTER
+# the file is written (see "Post-generation initramfs hook install"
+# near the end). --dry-run is honored as "show what would happen" for
+# whichever action(s) run.
+_install_hook_after_gen=0
 if [ -n "$INITRAMFS_HOOK_ACTION" ]; then
     if [ "$(id -u)" -ne 0 ] && [ "$DRY_RUN" -eq 0 ]; then
         printf 'modulejail: error: --%s-initramfs-hook requires root (writes to /usr/lib and /etc)\n' \
             "$INITRAMFS_HOOK_ACTION" >&2
         exit $EX_NOPERM
     fi
-    case "$INITRAMFS_HOOK_ACTION" in
-        install)   install_initramfs_hook   "$DRY_RUN" ;;
-        uninstall) uninstall_initramfs_hook "$DRY_RUN" ;;
-    esac
-    exit $EX_OK
+    if [ "$INITRAMFS_HOOK_ACTION" = 'install' ] && [ "$GEN_INTENT" -eq 1 ]; then
+        # Compose: generate the blacklist first (fall through), then
+        # install the hook once the file exists.
+        _install_hook_after_gen=1
+    else
+        case "$INITRAMFS_HOOK_ACTION" in
+            install)   install_initramfs_hook   "$DRY_RUN" ;;
+            uninstall) uninstall_initramfs_hook "$DRY_RUN" ;;
+        esac
+        exit $EX_OK
+    fi
 fi
 
 # --- Validate profile ---
@@ -1837,6 +1876,15 @@ elif [ "$QUIET" -eq 0 ]; then
         printf 'modulejail: blacklisted %d of %d modules (profile=%s) -> %s\n' \
             "$blacklist_count" "$universe_count" "$profile" "$output"
     fi
+fi
+
+# --- Post-generation initramfs hook install (composed run) ---
+# Reached only when --install-initramfs-hook was combined with explicit
+# generation flags (GEN_INTENT=1); the blacklist has now been written
+# (or previewed under --dry-run) above. A bare --install-initramfs-hook
+# never reaches here: it took the standalone dispatch-and-exit path.
+if [ "$_install_hook_after_gen" -eq 1 ]; then
+    install_initramfs_hook "$DRY_RUN"
 fi
 
 # === UPDATE CHECK ===

@@ -5,7 +5,7 @@
 # LICENSE file alongside it. The modulejail package it builds is licensed
 # under GPL-3.0-only by its upstream author (declared in license= below).
 pkgname=modulejail
-pkgver=1.4.3
+pkgver=1.5.0
 pkgrel=1
 pkgdesc='Proactively shrink Linux kernel-module attack surface by blacklisting unused modules'
 arch=('any')

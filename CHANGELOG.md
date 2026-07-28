@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-07-29
+
 Initial NixOS support (#22 by @DasGruene) plus install-line enforcement
 parity on the NixOS path.
 
@@ -42,6 +44,10 @@ parity on the NixOS path.
 - **`examples/whitelist-encryption.conf`**: a trimmable drop-in keep-set
   for hosts that open encrypted removable drives which are locked when
   ModuleJail runs.
+- **`SECURITY.md` disclosure policy**: private vulnerability reporting via
+  GitHub, with the in-scope failure classes named (fails-open,
+  integrity/supply-chain, local exploitation of the tool) and boot breakage
+  routed to the normal issue tracker.
 - **NixOS detection and Nix-expression output** (#22, @DasGruene): the
   script auto-detects NixOS via `/run/booted-system`, `/run/current-system`,
   or `/etc/os-release` and emits a Nix module instead of a

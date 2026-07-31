@@ -75,7 +75,7 @@ deploy it first; the deeper recipes compose on top.
 ## Quickstart
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.5.0/modulejail | sudo sh
+curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.5.1/modulejail | sudo sh
 ```
 
 > **WARNING: convenient, not safe.** This pipes unverified bytes from the
@@ -98,7 +98,7 @@ curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.5.0/modulejai
 > the keep-list unconditionally.
 >
 > ```sh
-> curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.5.0/modulejail | sudo sh -s -- -p desktop
+> curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.5.1/modulejail | sudo sh -s -- -p desktop
 > ```
 >
 > See [Profiles](#profiles) below for the full list.
@@ -107,7 +107,7 @@ The script writes its blacklist to `/etc/modprobe.d/modulejail-blacklist.conf`
 by default. To use a different path:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.5.0/modulejail | sudo sh -s -- -o /etc/modprobe.d/site-blacklist.conf
+curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.5.1/modulejail | sudo sh -s -- -o /etc/modprobe.d/site-blacklist.conf
 ```
 
 ## The Golden Rule
@@ -144,7 +144,7 @@ A ready-made drop-in for encrypted removable drives ships at
 Download, inspect, then run:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.5.0/modulejail -o /tmp/modulejail
+curl -fsSL https://raw.githubusercontent.com/jnuyens/modulejail/v1.5.1/modulejail -o /tmp/modulejail
 less /tmp/modulejail
 sudo sh /tmp/modulejail
 ```
@@ -159,12 +159,12 @@ to the GitHub release page:
 
 ```sh
 # Debian / Ubuntu:
-curl -fsSLO https://github.com/jnuyens/modulejail/releases/download/v1.5.0/modulejail_1.5.0_all.deb
-sudo dpkg -i modulejail_1.5.0_all.deb
+curl -fsSLO https://github.com/jnuyens/modulejail/releases/download/v1.5.1/modulejail_1.5.1_all.deb
+sudo dpkg -i modulejail_1.5.1_all.deb
 
 # RHEL / Fedora / Rocky:
-curl -fsSLO https://github.com/jnuyens/modulejail/releases/download/v1.5.0/modulejail-1.5.0-1.noarch.rpm
-sudo rpm -i modulejail-1.5.0-1.noarch.rpm
+curl -fsSLO https://github.com/jnuyens/modulejail/releases/download/v1.5.1/modulejail-1.5.1-1.noarch.rpm
+sudo rpm -i modulejail-1.5.1-1.noarch.rpm
 ```
 
 For Arch Linux and derivatives (Manjaro, EndeavourOS, ...), modulejail is
@@ -344,7 +344,7 @@ release on production hosts, and report the discrepancy upstream.
 > git config user.signingkey <KEYID-TO-BE-FILLED>
 > ```
 >
-> From then on, `git tag -a v1.5.0 -m "..."` auto-signs without the
+> From then on, `git tag -a v1.5.1 -m "..."` auto-signs without the
 > explicit `-s` flag. Replace `<KEYID-TO-BE-FILLED>` locally on the
 > maintainer's machine; do NOT commit a real key ID into this README
 > (the placeholder is the published form).
@@ -995,7 +995,7 @@ proliferating them across the documentation surface.
 
 ### Branching model
 
-- **`master`** tracks the latest stable release (currently `v1.5.0`).
+- **`master`** tracks the latest stable release (currently `v1.5.1`).
   Every commit on `master` is shippable. Hotfixes to the current
   stable line and small backward-compatible improvements (docs,
   packaging, small baseline additions) land here.

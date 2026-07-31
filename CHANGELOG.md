@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Desktop profile keeps `uhid`** (reported by @teou1 via #16; a Manjaro
+  forum user's Bluetooth Logitech M525 mouse stopped working). BlueZ creates
+  Bluetooth mice and keyboards as input devices through `/dev/uhid`, so BT HID
+  needs `uhid` loaded; when no BT input device was connected at run time it
+  got blacklisted. It joins `BASELINE_DESKTOP` (next to the Bluetooth stack),
+  NOT conservative: Bluetooth input is a desktop concern, and `uhid` is not a
+  `modules.dep` dependency of the bluetooth modules (BlueZ opens `/dev/uhid`
+  from userspace on demand), so transitive-closure resolution would not catch
+  it.
+
 ## [1.5.0] - 2026-07-29
 
 Initial NixOS support (#22 by @DasGruene) plus install-line enforcement

@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`--dry-run` no longer requires write access to the output directory**
+  (reported by @elelaysh, #28). The #25 revert of #24 dropped the `DRY_RUN`
+  guard on the output-target pre-flight but left its comment, so an
+  unprivileged `modulejail --dry-run` got `cannot write to /etc/modprobe.d`
+  instead of the preview. The whole output-target block (writability, plus
+  the directory / symlink / trailing-slash safety checks, all of which guard
+  a write that a preview never performs) is now skipped on `--dry-run`. Real
+  runs are unchanged.
+
 ## [1.5.1] - 2026-08-01
 
 ### Added

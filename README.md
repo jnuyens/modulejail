@@ -1117,11 +1117,11 @@ setting `MODULEJAIL_ON_NIXOS=1` in the test environment.
 
 ## Star History
 
-<a href="https://www.star-history.com/#jnuyens/modulejail&Date">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=jnuyens/modulejail&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=jnuyens/modulejail&type=Date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=jnuyens/modulejail&type=Date" />
+<a href="https://star-history.dera.page/#jnuyens/modulejail&Date">
+  <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://star-history.dera.page/svg?repos=jnuyens/modulejail&type=Date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://star-history.dera.page/svg?repos=jnuyens/modulejail&type=Date" />
+   <img alt="Star History Chart" src="https://star-history.dera.page/svg?repos=jnuyens/modulejail&type=Date" />
  </picture>
 </a>
 

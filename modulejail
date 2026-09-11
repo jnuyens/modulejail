@@ -567,14 +567,30 @@ EOF
             ;;
         mkinitcpio)
             target_file=/etc/initcpio/install/modulejail-strip
-            pacman_hook=/usr/share/libalpm/hooks/95-modulejail-strip.hook
+            confd_file=/etc/mkinitcpio.conf.d/modulejail-strip.conf
+            legacy_pacman_hook=/usr/share/libalpm/hooks/95-modulejail-strip.hook
+            # mkinitcpio has no auto-include for install hooks (unlike dracut,
+            # whose check()=0 modules are auto-added, or initramfs-tools, whose
+            # hooks-dir scripts run on every build). The strip hook therefore
+            # has to appear in HOOKS to run inside the distro's own single
+            # `mkinitcpio -P` on kernel install. We add it with a conf.d
+            # drop-in (HOOKS+=(...)), read from /etc/mkinitcpio.conf.d/ since
+            # mkinitcpio 31. This replaces the previous separate pacman trigger
+            # that fired a SECOND full `mkinitcpio -P` after the distro's own
+            # build (github #29, diagnosed by @tjmnmk): the first build was
+            # wasted work and left a brief window where the freshly written
+            # initramfs still carried the blacklist. The drop-in brings Arch
+            # in line with the single-build behavior dracut and initramfs-tools
+            # already have. Appended (not prepended) so it runs after modconf,
+            # the hook that copies /etc/modprobe.d/*.conf into the image.
             if [ "$dry_run" -eq 1 ]; then
                 printf 'modulejail: dry-run: would write %s (0755)\n' "$target_file"
-                if command -v pacman >/dev/null 2>&1 && [ -d /usr/share/libalpm/hooks ]; then
-                    printf 'modulejail: dry-run: would write %s (0644)\n' "$pacman_hook"
+                printf 'modulejail: dry-run: would write %s (0644): HOOKS+=(modulejail-strip)\n' "$confd_file"
+                if [ -e "$legacy_pacman_hook" ]; then
+                    printf 'modulejail: dry-run: would remove legacy pacman trigger %s (superseded, double-build)\n' "$legacy_pacman_hook"
                 fi
                 # shellcheck disable=SC2016  # literal backticks intended for human-readable output
-                printf 'modulejail: dry-run: would run `mkinitcpio -P -- -A modulejail-strip`\n'
+                printf 'modulejail: dry-run: would run `mkinitcpio -P`\n'
                 return 0
             fi
             cat > "$target_file" <<'EOF'
@@ -598,30 +614,31 @@ HELP
 EOF
             chmod 0755 "$target_file"
             printf 'modulejail: wrote mkinitcpio install hook: %s\n' "$target_file"
-            if command -v pacman >/dev/null 2>&1 && [ -d /usr/share/libalpm/hooks ]; then
-                cat > "$pacman_hook" <<'EOF'
-# pacman trigger for the modulejail-strip mkinitcpio hook.
-# Installed by `modulejail --install-initramfs-hook`. Rebuilds every
-# initramfs with the modulejail-strip hook appended after any kernel
-# install or upgrade.
-# See github.com/jnuyens/modulejail issue #19.
-[Trigger]
-Type = Path
-Operation = Install
-Operation = Upgrade
-Target = usr/lib/modules/*/vmlinuz
-
-[Action]
-Description = Stripping modulejail blacklist from rebuilt initramfs images...
-When = PostTransaction
-Exec = /usr/bin/mkinitcpio -P -- -A modulejail-strip
-NeedsTargets
+            mkdir -p /etc/mkinitcpio.conf.d
+            cat > "$confd_file" <<'EOF'
+# modulejail: run the modulejail-strip hook on every mkinitcpio build.
+# Appending it to HOOKS makes the distro's own `mkinitcpio -P` (fired by
+# the mkinitcpio kernel-install pacman hook) strip modulejail-blacklist.conf
+# from the initramfs in a single build, so the blacklist never governs
+# early boot. See github.com/jnuyens/modulejail issues #19 and #29.
+# Remove with `modulejail --uninstall-initramfs-hook`.
+HOOKS+=(modulejail-strip)
 EOF
-                chmod 0644 "$pacman_hook"
-                printf 'modulejail: wrote pacman trigger: %s\n' "$pacman_hook"
+            chmod 0644 "$confd_file"
+            printf 'modulejail: wrote mkinitcpio HOOKS drop-in: %s\n' "$confd_file"
+            # Warn (do not silently no-op) if mkinitcpio predates conf.d
+            # drop-in support (v31, 2022): older versions ignore the drop-in.
+            _mj_mkiver=$(mkinitcpio --version 2>/dev/null | grep -oE '[0-9]+' | head -1)
+            if [ -n "$_mj_mkiver" ] && [ "$_mj_mkiver" -lt 31 ] 2>/dev/null; then
+                printf 'modulejail: warning: mkinitcpio %s predates /etc/mkinitcpio.conf.d support (v31); add modulejail-strip to HOOKS in /etc/mkinitcpio.conf by hand or the strip will not run\n' "$_mj_mkiver" >&2
+            fi
+            # Migrate away from the old double-build pacman trigger, if present.
+            if [ -e "$legacy_pacman_hook" ]; then
+                rm -f "$legacy_pacman_hook"
+                printf 'modulejail: removed legacy pacman trigger (superseded by the HOOKS drop-in): %s\n' "$legacy_pacman_hook"
             fi
             # shellcheck disable=SC2016  # literal backticks intended for human-readable output
-            printf 'modulejail: run `mkinitcpio -P -- -A modulejail-strip` to apply to existing initramfs images\n'
+            printf 'modulejail: run `mkinitcpio -P` to apply to existing initramfs images\n'
             ;;
     esac
 
@@ -642,6 +659,7 @@ uninstall_initramfs_hook() {
         /etc/initramfs-tools/hooks/zz-modulejail-strip \
         /etc/initcpio/install/modulejail-strip \
         /usr/lib/initcpio/install/modulejail-strip \
+        /etc/mkinitcpio.conf.d/modulejail-strip.conf \
         /usr/share/libalpm/hooks/95-modulejail-strip.hook
     do
         if [ -e "$path" ]; then

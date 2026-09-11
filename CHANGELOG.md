@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **mkinitcpio: strip the blacklist in the distro's single build** (root cause
+  diagnosed by @tjmnmk, #29). `--install-initramfs-hook` no longer installs a
+  separate pacman trigger that ran a second full `mkinitcpio -P` after the
+  distro's own kernel-install rebuild. Instead it drops
+  `HOOKS+=(modulejail-strip)` into `/etc/mkinitcpio.conf.d/`, so the strip hook
+  runs inside the distro's single build. This removes the wasted second build
+  and the brief window where the freshly written initramfs still carried the
+  blacklist, bringing Arch in line with dracut and initramfs-tools, which
+  already participate in one build. Reinstalling over an older version removes
+  the legacy `95-modulejail-strip.hook` trigger, and `--uninstall-initramfs-hook`
+  cleans up the new drop-in. Requires mkinitcpio 31+ (for `conf.d` drop-ins);
+  older versions get a warning to add the hook to `HOOKS` by hand. Verified on a
+  live Arch host (mkinitcpio 41): one build, the strip hook runs, and the
+  blacklist is absent from the generated image.
+
 ## [1.6.1] - 2026-08-27
 
 ### Added

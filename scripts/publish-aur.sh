@@ -127,16 +127,57 @@ else
     echo "publish-aur.sh: PKGBUILD updated to $NEW_PKGVER-$NEW_PKGREL with sha256=$SHA256"
 fi
 
-# --- regenerate .SRCINFO on the remote Arch host ----------------------------
-# Both PKGBUILD AND modulejail.install must be on the remote so that
-# makepkg can find the install file referenced by `install=$pkgname.install`.
-echo "publish-aur.sh: regenerating .SRCINFO on $REMOTE_BUILD_HOST..."
-ssh "$REMOTE_BUILD_HOST" "rm -rf /tmp/aur-smoke && mkdir -p /tmp/aur-smoke"
-scp -q "$PKGBUILD"      "$REMOTE_BUILD_HOST:/tmp/aur-smoke/PKGBUILD"
-scp -q "$INSTALL_FILE"  "$REMOTE_BUILD_HOST:/tmp/aur-smoke/modulejail.install"
-ssh "$REMOTE_BUILD_HOST" 'cd /tmp/aur-smoke && makepkg --printsrcinfo > .SRCINFO'
+# gen_srcinfo_local PKGBUILD
+# Emit .SRCINFO (makepkg --printsrcinfo format) for this single-package
+# PKGBUILD WITHOUT makepkg, by sourcing it in bash and printing the fields in
+# makepkg's order. Verified byte-identical to `makepkg --printsrcinfo` for the
+# current PKGBUILD; if the PKGBUILD gains fields (depends, provides, ...),
+# re-verify the ordering against real makepkg output. Used only as the last
+# fallback when no Arch host is reachable, so releases stop tripping when the
+# remote build box (a default-off test VM) happens to be down.
+gen_srcinfo_local() {
+    bash -c '
+        set -eu
+        . "$1"
+        printf "pkgbase = %s\n" "$pkgname"
+        printf "\tpkgdesc = %s\n" "$pkgdesc"
+        printf "\tpkgver = %s\n" "$pkgver"
+        printf "\tpkgrel = %s\n" "$pkgrel"
+        [ -n "${epoch:-}" ] && printf "\tepoch = %s\n" "$epoch"
+        [ -n "${url:-}" ] && printf "\turl = %s\n" "$url"
+        [ -n "${install:-}" ] && printf "\tinstall = %s\n" "$install"
+        for x in "${arch[@]}"; do printf "\tarch = %s\n" "$x"; done
+        for x in "${license[@]}"; do printf "\tlicense = %s\n" "$x"; done
+        for x in "${makedepends[@]:-}"; do [ -n "$x" ] && printf "\tmakedepends = %s\n" "$x"; done
+        for x in "${depends[@]:-}"; do [ -n "$x" ] && printf "\tdepends = %s\n" "$x"; done
+        for x in "${optdepends[@]:-}"; do [ -n "$x" ] && printf "\toptdepends = %s\n" "$x"; done
+        for x in "${source[@]}"; do printf "\tsource = %s\n" "$x"; done
+        for x in "${sha256sums[@]}"; do printf "\tsha256sums = %s\n" "$x"; done
+        printf "\npkgname = %s\n" "$pkgname"
+    ' _ "$1"
+}
+
+# --- regenerate .SRCINFO ----------------------------------------------------
+# Authoritative source is `makepkg --printsrcinfo`. Prefer a local makepkg
+# (publish running on an Arch host), then a reachable REMOTE_BUILD_HOST, and
+# finally the local generator above. Both PKGBUILD and modulejail.install go
+# to the remote so makepkg finds the install file referenced by `install=`.
 SRCINFO_TMP=$(mktemp)
-scp -q "$REMOTE_BUILD_HOST:/tmp/aur-smoke/.SRCINFO" "$SRCINFO_TMP"
+if command -v makepkg >/dev/null 2>&1; then
+    echo "publish-aur.sh: regenerating .SRCINFO with local makepkg"
+    ( cd "$(dirname "$PKGBUILD")" && makepkg --printsrcinfo ) > "$SRCINFO_TMP"
+elif ssh -o ConnectTimeout=8 -o BatchMode=yes "$REMOTE_BUILD_HOST" 'command -v makepkg >/dev/null 2>&1' >/dev/null 2>&1; then
+    echo "publish-aur.sh: regenerating .SRCINFO with makepkg on $REMOTE_BUILD_HOST..."
+    ssh "$REMOTE_BUILD_HOST" "rm -rf /tmp/aur-smoke && mkdir -p /tmp/aur-smoke"
+    scp -q "$PKGBUILD"      "$REMOTE_BUILD_HOST:/tmp/aur-smoke/PKGBUILD"
+    scp -q "$INSTALL_FILE"  "$REMOTE_BUILD_HOST:/tmp/aur-smoke/modulejail.install"
+    ssh "$REMOTE_BUILD_HOST" 'cd /tmp/aur-smoke && makepkg --printsrcinfo > .SRCINFO'
+    scp -q "$REMOTE_BUILD_HOST:/tmp/aur-smoke/.SRCINFO" "$SRCINFO_TMP"
+else
+    echo "publish-aur.sh: no local makepkg and $REMOTE_BUILD_HOST unreachable; generating .SRCINFO locally"
+    command -v bash >/dev/null 2>&1 || { echo "publish-aur.sh: error: local .SRCINFO fallback needs bash" >&2; exit 1; }
+    gen_srcinfo_local "$PKGBUILD" > "$SRCINFO_TMP"
+fi
 
 # --- prepare the AUR publish clone ------------------------------------------
 if [ ! -d "$AUR_PUBLISH_DIR/.git" ]; then

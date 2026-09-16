@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **`--install-initramfs-hook` skips cleanly on ostree / immutable systems**
+  (Fedora Silverblue, Kinoite, CoreOS, bootc; prompted by @richarddribeiro's
+  Silverblue question in #33). It used to fail with a raw `Read-only file
+  system` error trying to write a dracut module under the immutable `/usr`.
+  Now it detects `/run/ostree-booted` and skips with an explanation, returning
+  0 (important for the packaged post-install, which runs the flag
+  automatically). The skip is safe because the hook is unnecessary there:
+  verified on Silverblue 45 that the initramfs is image-provided and never
+  includes `/etc/modprobe.d`, even with host-local regeneration
+  (`rpm-ostree initramfs --enable`) turned on, so the gh #19
+  upgrade-then-stale trap the hook guards against does not exist. modulejail's
+  core function is unaffected: it writes the blacklist to the writable `/etc`
+  and `modprobe` honors it normally. Fixture: `ostree-initramfs-hook-skip.sh`.
+
 ## [1.6.2] - 2026-09-16
 
 ### Changed

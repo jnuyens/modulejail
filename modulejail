@@ -502,6 +502,28 @@ detect_initramfs_tool() {
 install_initramfs_hook() {
     dry_run=$1
 
+    # On ostree / image-based immutable systems (Fedora Silverblue, Kinoite,
+    # CoreOS, bootc, ...) the strip hook is both impossible and unnecessary:
+    # /usr is read-only so a dracut module cannot be installed there, and the
+    # initramfs is provided by the image (not regenerated from the host's
+    # /etc), so the blacklist never enters it. Verified on Silverblue 45: the
+    # initramfs carries zero /etc/modprobe.d entries, even with host-local
+    # regeneration (`rpm-ostree initramfs --enable`) turned on. So the
+    # upgrade-then-stale trap (gh #19) the hook guards against does not exist
+    # here. Detect via /run/ostree-booted and skip cleanly (return 0) instead
+    # of failing with a raw "Read-only file system" error - important for the
+    # packaged path, whose post-install runs this flag automatically.
+    # Marker path overridable via MODULEJAIL_OSTREE_MARKER for test fixtures
+    # (test-only plumbing, cf. MODULEJAIL_PROC_MODULES). End users leave unset.
+    if [ -e "${MODULEJAIL_OSTREE_MARKER:-/run/ostree-booted}" ]; then
+        printf 'modulejail: ostree/immutable system detected (/run/ostree-booted).\n'
+        printf 'modulejail: the initramfs strip hook is not needed here: the initramfs is\n'
+        printf 'modulejail: image-provided and never includes /etc/modprobe.d, so the blacklist\n'
+        printf 'modulejail: cannot be baked into it (the gh #19 upgrade-then-stale trap the hook\n'
+        printf 'modulejail: guards against does not apply). Skipping - nothing to install.\n'
+        return 0
+    fi
+
     tool=$(detect_initramfs_tool)
     if [ -z "$tool" ]; then
         printf 'modulejail: error: no supported initramfs builder detected on this host\n' >&2

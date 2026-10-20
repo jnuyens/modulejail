@@ -36,7 +36,6 @@ assert_grep '^UPDATE_CHECK_DEFAULT=0$' "$PATCHED" patched-switch-off
 if ! command -v curl >/dev/null 2>&1; then
     printf '[%s] note: curl not found, skipping the update-check run half\n' "$CASE_NAME"
     case_pass
-    exit 0
 fi
 
 printf '[\n  {\n    "name": "v99.0.0",\n    "zipball_url": "x"\n  }\n]\n' > "$CASE_TMP/tags.json"

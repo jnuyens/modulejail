@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`--destdir DIR` and `--initramfs-builder NAME` for package builds**
+  (asked for in the Fedora package review, bug 2541665). With
+  `--install-initramfs-hook`, these write the strip hook into a staging
+  root such as `%{buildroot}`, so a distro package can own the hook in its
+  file list instead of creating unowned files from `%post`. No root needed,
+  no host detection, and none of the host-only steps (ostree skip, rebuild
+  advice, legacy pacman trigger cleanup). `--destdir` requires
+  `--initramfs-builder` and rejects `--uninstall-initramfs-hook` and
+  blacklist generation flags. The upstream RPM spec now uses it:
+  `/usr/lib/dracut/modules.d/99modulejail-strip/` is a packaged file, and
+  the `%post` / `%preun` hook calls are gone. `--initramfs-builder` also
+  works on its own to override detection. Fixture:
+  `install-initramfs-hook-destdir.sh`.
+- **Build-time switch to ship with the update check off.** Distro packages
+  update through the package manager, so the post-run GitHub lookup is
+  noise there. Packagers run
+  `sed -i 's/^UPDATE_CHECK_DEFAULT=1$/UPDATE_CHECK_DEFAULT=0/' modulejail`
+  at build time. `MODULEJAIL_NO_UPDATE_CHECK` keeps working per run on
+  builds that leave it on. Fixture: `update-check-build-switch.sh` (also
+  checks that the documented sed line changes exactly one line).
+- **modulejail(8) now documents the initramfs hook flags**, which it had
+  never covered.
+
 ### Changed
 
 - **`--install-initramfs-hook` skips cleanly on ostree / immutable systems**
@@ -22,6 +47,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   upgrade-then-stale trap the hook guards against does not exist. modulejail's
   core function is unaffected: it writes the blacklist to the writable `/etc`
   and `modprobe` honors it normally. Fixture: `ostree-initramfs-hook-skip.sh`.
+
+### Docs
+
+- **`docs/DEFENSE-IN-DEPTH.md`: worked example for the October 2026 CVE
+  batch.** Sorts the eleven kernel CVEs NVD published on 2026-10-18 into
+  the autoload tiers: two reachable by an unprivileged user (RDS,
+  CVE-2026-98560; `act_ct` via user namespaces, CVE-2026-98441), six that
+  need hardware or root, and three in built-in code that ModuleJail cannot
+  touch. Also adds the `tc` autoload path (`act_*`, `cls_*`, `sch_*` over
+  rtnetlink) to the Tier 6 table.
 
 ## [1.6.2] - 2026-09-16
 

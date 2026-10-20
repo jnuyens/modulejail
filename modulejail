@@ -33,6 +33,16 @@ export PATH
 # VERSION is the single source of truth for both --version and the
 # generated blacklist header. Bump on every release per SemVer.
 VERSION='1.6.2'
+
+# --- Build-time switch for distro packages ---
+# UPDATE_CHECK_DEFAULT=1 makes every run end with a best-effort lookup of
+# the latest release tag on GitHub (see check_for_updates). Distro packages
+# get their updates from the package manager, so they should ship with the
+# check off. Flip it at build time with this exact line:
+#     sed -i 's/^UPDATE_CHECK_DEFAULT=1$/UPDATE_CHECK_DEFAULT=0/' modulejail
+# When it is 1, MODULEJAIL_NO_UPDATE_CHECK still turns the check off per run.
+UPDATE_CHECK_DEFAULT=1
+
 EX_OK=0
 # sysexits.h conventional codes (see man 3 sysexits):
 #   64=usage 65=dataerr 66=noinput 70=software 71=oserr 73=cantcreat 77=noperm
@@ -60,6 +70,11 @@ QUIET=0
 VERBOSE=0
 OUTPUT_FORMAT=''
 INITRAMFS_HOOK_ACTION=''
+# HOOK_DESTDIR / HOOK_BUILDER: set by --destdir / --initramfs-builder so a
+# package build can write the strip hook into its staging root (see
+# install_initramfs_hook).
+HOOK_DESTDIR=''
+HOOK_BUILDER=''
 ASSUME_YES=0
 SELF_UPDATE=0
 # GEN_INTENT: set to 1 by the parser when any generation-defining flag
@@ -378,6 +393,16 @@ usage() {
     printf '                    Remove all four possible hook file paths regardless\n'
     printf '                    of which builder is currently detected (handles\n'
     printf '                    distro migrations). Requires root.\n'
+    printf '  --destdir DIR     For package builds, with --install-initramfs-hook:\n'
+    printf '                    write the hook under DIR (e.g. %%{buildroot}) so the\n'
+    printf '                    package can own it, instead of creating it from a\n'
+    printf '                    post-install script. Needs --initramfs-builder; no\n'
+    printf '                    root needed. Example:\n'
+    printf '                    modulejail --install-initramfs-hook \\\n'
+    # shellcheck disable=SC2016  # literal $DESTDIR intended for human-readable output
+    printf '                        --initramfs-builder dracut --destdir "$DESTDIR"\n'
+    printf '  --initramfs-builder {dracut|initramfs-tools|mkinitcpio}\n'
+    printf '                    Use this builder instead of detecting one on the host.\n'
     printf '  -y, --yes         Skip the interactive confirmation prompt that\n'
     printf '                    --self-update would otherwise present. Required\n'
     printf '                    when --self-update is invoked from a non-\n'
@@ -424,6 +449,9 @@ usage() {
     printf 'Environment:\n'
     printf '  MODULEJAIL_NO_UPDATE_CHECK   Set to any non-empty value to skip the post-run\n'
     printf '                               check for a newer release on GitHub.\n'
+    printf '                               Distro packages can switch the check off at\n'
+    printf '                               build time instead: see UPDATE_CHECK_DEFAULT\n'
+    printf '                               near the top of the script.\n'
     printf '  MODULEJAIL_LOGGER_PATH       Path to the logger binary used for the syslog\n'
     printf '                               install-line detection (default: /usr/bin/logger).\n'
     printf '                               Test-only plumbing; end-user operators leave unset.\n'
@@ -477,7 +505,12 @@ detect_initramfs_tool() {
     #
     # MODULEJAIL_INITRAMFS_BUILDER overrides detection for test fixtures
     # (analogous to MODULEJAIL_PROC_MODULES / MODULEJAIL_LOGGER_PATH).
-    # End-user operators leave unset.
+    # End-user operators leave unset. --initramfs-builder (HOOK_BUILDER)
+    # takes precedence over both.
+    if [ -n "$HOOK_BUILDER" ]; then
+        printf '%s' "$HOOK_BUILDER"
+        return 0
+    fi
     if [ -n "${MODULEJAIL_INITRAMFS_BUILDER:-}" ]; then
         printf '%s' "$MODULEJAIL_INITRAMFS_BUILDER"
         return 0
@@ -502,6 +535,17 @@ detect_initramfs_tool() {
 install_initramfs_hook() {
     dry_run=$1
 
+    # Package-build mode (--destdir): write under the staging root, skip
+    # everything that describes the build host (ostree marker, legacy
+    # files, mkinitcpio version, rebuild advice). The package then owns
+    # the hook files through its file list.
+    d=${HOOK_DESTDIR%/}
+    if [ -n "$HOOK_DESTDIR" ]; then
+        staging=1
+    else
+        staging=0
+    fi
+
     # On ostree / image-based immutable systems (Fedora Silverblue, Kinoite,
     # CoreOS, bootc, ...) the strip hook is both impossible and unnecessary:
     # /usr is read-only so a dracut module cannot be installed there, and the
@@ -515,7 +559,7 @@ install_initramfs_hook() {
     # packaged path, whose post-install runs this flag automatically.
     # Marker path overridable via MODULEJAIL_OSTREE_MARKER for test fixtures
     # (test-only plumbing, cf. MODULEJAIL_PROC_MODULES). End users leave unset.
-    if [ -e "${MODULEJAIL_OSTREE_MARKER:-/run/ostree-booted}" ]; then
+    if [ "$staging" -eq 0 ] && [ -e "${MODULEJAIL_OSTREE_MARKER:-/run/ostree-booted}" ]; then
         printf 'modulejail: ostree/immutable system detected (/run/ostree-booted).\n'
         printf 'modulejail: the initramfs strip hook is not needed here: the initramfs is\n'
         printf 'modulejail: image-provided and never includes /etc/modprobe.d, so the blacklist\n'
@@ -533,12 +577,12 @@ install_initramfs_hook() {
 
     case "$tool" in
         dracut)
-            target_dir=/usr/lib/dracut/modules.d/99modulejail-strip
+            target_dir=$d/usr/lib/dracut/modules.d/99modulejail-strip
             target_file=$target_dir/module-setup.sh
             if [ "$dry_run" -eq 1 ]; then
                 printf 'modulejail: dry-run: would write %s (0755)\n' "$target_file"
                 # shellcheck disable=SC2016  # literal backticks intended for human-readable output
-                printf 'modulejail: dry-run: would run `dracut --force --regenerate-all`\n'
+                [ "$staging" -eq 1 ] || printf 'modulejail: dry-run: would run `dracut --force --regenerate-all`\n'
                 return 0
             fi
             mkdir -p "$target_dir"
@@ -558,16 +602,17 @@ EOF
             chmod 0755 "$target_file"
             printf 'modulejail: wrote dracut module: %s\n' "$target_file"
             # shellcheck disable=SC2016  # literal backticks intended for human-readable output
-            printf 'modulejail: run `dracut --force --regenerate-all` to apply to existing initramfs images\n'
+            [ "$staging" -eq 1 ] || printf 'modulejail: run `dracut --force --regenerate-all` to apply to existing initramfs images\n'
             ;;
         initramfs-tools)
-            target_file=/etc/initramfs-tools/hooks/zz-modulejail-strip
+            target_file=$d/etc/initramfs-tools/hooks/zz-modulejail-strip
             if [ "$dry_run" -eq 1 ]; then
                 printf 'modulejail: dry-run: would write %s (0755)\n' "$target_file"
                 # shellcheck disable=SC2016  # literal backticks intended for human-readable output
-                printf 'modulejail: dry-run: would run `update-initramfs -u -k all`\n'
+                [ "$staging" -eq 1 ] || printf 'modulejail: dry-run: would run `update-initramfs -u -k all`\n'
                 return 0
             fi
+            [ "$staging" -eq 0 ] || mkdir -p "${target_file%/*}"
             cat > "$target_file" <<'EOF'
 #!/bin/sh
 # Strip modulejail's blacklist from the initramfs being built.
@@ -585,11 +630,11 @@ EOF
             chmod 0755 "$target_file"
             printf 'modulejail: wrote initramfs-tools hook: %s\n' "$target_file"
             # shellcheck disable=SC2016  # literal backticks intended for human-readable output
-            printf 'modulejail: run `update-initramfs -u -k all` to apply to existing initramfs images\n'
+            [ "$staging" -eq 1 ] || printf 'modulejail: run `update-initramfs -u -k all` to apply to existing initramfs images\n'
             ;;
         mkinitcpio)
-            target_file=/etc/initcpio/install/modulejail-strip
-            confd_file=/etc/mkinitcpio.conf.d/modulejail-strip.conf
+            target_file=$d/etc/initcpio/install/modulejail-strip
+            confd_file=$d/etc/mkinitcpio.conf.d/modulejail-strip.conf
             legacy_pacman_hook=/usr/share/libalpm/hooks/95-modulejail-strip.hook
             # mkinitcpio has no auto-include for install hooks (unlike dracut,
             # whose check()=0 modules are auto-added, or initramfs-tools, whose
@@ -608,6 +653,7 @@ EOF
             if [ "$dry_run" -eq 1 ]; then
                 printf 'modulejail: dry-run: would write %s (0755)\n' "$target_file"
                 printf 'modulejail: dry-run: would write %s (0644): HOOKS+=(modulejail-strip)\n' "$confd_file"
+                [ "$staging" -eq 1 ] && return 0
                 if [ -e "$legacy_pacman_hook" ]; then
                     printf 'modulejail: dry-run: would remove legacy pacman trigger %s (superseded, double-build)\n' "$legacy_pacman_hook"
                 fi
@@ -615,6 +661,7 @@ EOF
                 printf 'modulejail: dry-run: would run `mkinitcpio -P`\n'
                 return 0
             fi
+            [ "$staging" -eq 0 ] || mkdir -p "${target_file%/*}"
             cat > "$target_file" <<'EOF'
 #!/bin/bash
 # Strip modulejail's blacklist from the initramfs being built.
@@ -636,7 +683,7 @@ HELP
 EOF
             chmod 0755 "$target_file"
             printf 'modulejail: wrote mkinitcpio install hook: %s\n' "$target_file"
-            mkdir -p /etc/mkinitcpio.conf.d
+            mkdir -p "${confd_file%/*}"
             cat > "$confd_file" <<'EOF'
 # modulejail: run the modulejail-strip hook on every mkinitcpio build.
 # Appending it to HOOKS makes the distro's own `mkinitcpio -P` (fired by
@@ -648,6 +695,10 @@ HOOKS+=(modulejail-strip)
 EOF
             chmod 0644 "$confd_file"
             printf 'modulejail: wrote mkinitcpio HOOKS drop-in: %s\n' "$confd_file"
+            if [ "$staging" -eq 1 ]; then
+                printf 'modulejail: initramfs strip hook staged under %s (builder: %s)\n' "${d:-/}" "$tool"
+                return 0
+            fi
             # Warn (do not silently no-op) if mkinitcpio predates conf.d
             # drop-in support (v31, 2022): older versions ignore the drop-in.
             _mj_mkiver=$(mkinitcpio --version 2>/dev/null | grep -oE '[0-9]+' | head -1)
@@ -664,6 +715,10 @@ EOF
             ;;
     esac
 
+    if [ "$staging" -eq 1 ]; then
+        printf 'modulejail: initramfs strip hook staged under %s (builder: %s)\n' "${d:-/}" "$tool"
+        return 0
+    fi
     printf 'modulejail: initramfs strip hook installed (detected builder: %s)\n' "$tool"
 }
 
@@ -1057,6 +1112,26 @@ while [ $# -gt 0 ]; do
             INITRAMFS_HOOK_ACTION='uninstall'
             shift
             ;;
+        --destdir)
+            [ $# -ge 2 ] || { printf 'modulejail: error: --destdir requires a directory argument\n' >&2; exit $EX_USAGE; }
+            HOOK_DESTDIR="$2"
+            [ -n "$HOOK_DESTDIR" ] || { printf 'modulejail: error: --destdir requires a non-empty directory argument\n' >&2; exit $EX_USAGE; }
+            shift 2
+            ;;
+        --destdir=*)
+            HOOK_DESTDIR="${1#*=}"
+            [ -n "$HOOK_DESTDIR" ] || { printf 'modulejail: error: --destdir= requires a non-empty directory argument\n' >&2; exit $EX_USAGE; }
+            shift
+            ;;
+        --initramfs-builder)
+            [ $# -ge 2 ] || { printf 'modulejail: error: --initramfs-builder requires dracut, initramfs-tools or mkinitcpio\n' >&2; exit $EX_USAGE; }
+            HOOK_BUILDER="$2"
+            shift 2
+            ;;
+        --initramfs-builder=*)
+            HOOK_BUILDER="${1#*=}"
+            shift
+            ;;
         -y|--yes)
             ASSUME_YES=1
             shift
@@ -1131,9 +1206,36 @@ fi
 # the file is written (see "Post-generation initramfs hook install"
 # near the end). --dry-run is honored as "show what would happen" for
 # whichever action(s) run.
+#
+# --destdir DIR (package builds) writes the hook under DIR instead of /.
+# It only makes sense for a bare install: the build root is not the host,
+# so there is no blacklist to generate and nothing to uninstall, and the
+# build host's own initramfs builder is irrelevant, so --initramfs-builder
+# is required. No root needed: the packager owns DIR.
+case "$HOOK_BUILDER" in
+    ''|dracut|initramfs-tools|mkinitcpio) ;;
+    *) printf 'modulejail: error: unknown initramfs builder: %s (expected dracut, initramfs-tools, mkinitcpio)\n' "$HOOK_BUILDER" >&2; exit $EX_USAGE ;;
+esac
+if [ -n "$HOOK_DESTDIR" ] || [ -n "$HOOK_BUILDER" ]; then
+    if [ "$INITRAMFS_HOOK_ACTION" != 'install' ]; then
+        printf 'modulejail: error: --destdir and --initramfs-builder only apply to --install-initramfs-hook\n' >&2
+        exit $EX_USAGE
+    fi
+fi
+if [ -n "$HOOK_DESTDIR" ]; then
+    if [ "$GEN_INTENT" -eq 1 ]; then
+        printf 'modulejail: error: --destdir installs the hook only; it cannot be combined with blacklist generation flags\n' >&2
+        exit $EX_USAGE
+    fi
+    if [ -z "$HOOK_BUILDER" ]; then
+        printf 'modulejail: error: --destdir requires --initramfs-builder (the build host'"'"'s builder says nothing about the target)\n' >&2
+        exit $EX_USAGE
+    fi
+fi
+
 _install_hook_after_gen=0
 if [ -n "$INITRAMFS_HOOK_ACTION" ]; then
-    if [ "$(id -u)" -ne 0 ] && [ "$DRY_RUN" -eq 0 ]; then
+    if [ -z "$HOOK_DESTDIR" ] && [ "$(id -u)" -ne 0 ] && [ "$DRY_RUN" -eq 0 ]; then
         printf 'modulejail: error: --%s-initramfs-hook requires root (writes to /usr/lib and /etc)\n' \
             "$INITRAMFS_HOOK_ACTION" >&2
         exit $EX_NOPERM
@@ -2152,6 +2254,7 @@ ver_cmp() {
 # redirect because it works whether or not GitHub Release objects have
 # been created for the tags.
 check_for_updates() {
+    [ "$UPDATE_CHECK_DEFAULT" = 1 ] || return 0
     [ -n "${MODULEJAIL_NO_UPDATE_CHECK:-}" ] && return 0
     update_url=${MODULEJAIL_UPDATE_URL:-https://api.github.com/repos/jnuyens/modulejail/tags}
 

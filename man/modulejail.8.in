@@ -340,6 +340,58 @@ composes with
 .BR \-\-verbose\-logging .
 Available since v1.6.
 .TP
+.B \-\-install\-initramfs\-hook
+Install a small hook for the detected initramfs builder
+.RB ( dracut ,
+.BR initramfs\-tools ,
+or
+.BR mkinitcpio )
+that strips
+.I modulejail\-blacklist.conf
+from every initramfs it builds. The blacklist is a policy for the running
+system; baked into an initramfs it goes stale on the next kernel upgrade
+and can block a renamed storage driver at boot. Prints the rebuild command
+but does not rebuild existing images. Requires root unless combined with
+.B \-\-dry\-run
+or
+.BR \-\-destdir .
+On its own it only installs the hook; combined with generation flags
+.RB ( \-p ,
+.BR \-o ,
+\&...) it regenerates the blacklist first. On ostree systems (Silverblue,
+CoreOS, bootc) it skips, because the image-provided initramfs never
+includes
+.IR /etc/modprobe.d .
+.TP
+.B \-\-uninstall\-initramfs\-hook
+Remove every hook path any builder could use. Requires root.
+.TP
+.BI \-\-destdir " dir"
+For package builds: with
+.B \-\-install\-initramfs\-hook
+and
+.BR \-\-initramfs\-builder ,
+write the hook under
+.I dir
+(for example
+.IR %{buildroot} )
+so the package owns it in its file list, instead of creating it from a
+post-install script. Skips the host-specific steps (ostree check, rebuild
+advice, legacy file cleanup) and needs no root. Cannot be combined with
+.B \-\-uninstall\-initramfs\-hook
+or generation flags. Available since v1.6.3.
+.TP
+.BI \-\-initramfs\-builder " name"
+Use
+.I name
+.RB ( dracut ,
+.BR initramfs\-tools ,
+or
+.BR mkinitcpio )
+instead of detecting the builder on the host. Required with
+.BR \-\-destdir .
+Available since v1.6.3.
+.TP
 .BR \-V ", " \-\-version
 Print version, repository URL, and license, then exit
 .BR 0 .
@@ -803,6 +855,11 @@ release on GitHub. The check has a 10-second hard timeout and is silent
 on every failure mode; this variable disables it entirely for offline
 fleets, restricted networks, or pipeline-style automation where any
 unexpected output is noise.
+Distro packages can turn the check off at build time instead, by setting
+.B UPDATE_CHECK_DEFAULT=0
+near the top of the script:
+.B "sed \-i 's/^UPDATE_CHECK_DEFAULT=1$/UPDATE_CHECK_DEFAULT=0/' modulejail"
+(since v1.6.3).
 .TP
 .B MODULEJAIL_LOGGER_PATH
 Path to the

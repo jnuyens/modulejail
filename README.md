@@ -418,8 +418,9 @@ modules are never blacklisted regardless of the running profile.
   new module blacklisted in the freshly-built initramfs and brick the
   next boot. The `--install-initramfs-hook` flag (since v1.4) installs
   a small per-distro hook that strips the modulejail blacklist from
-  the cpio at build time. Packaged installs (.deb / .rpm / AUR) call
-  the flag automatically in their post-install scripts.
+  the cpio at build time. The .rpm ships the dracut hook as a packaged
+  file (staged with `--destdir` at build time, since v1.6.3); the .deb
+  and AUR packages call the flag from their post-install scripts.
 - **Revert.** The revert path for the blacklist is "remove the
   generated file" (no reboot needed; the blacklist is consulted by
   `modprobe` at load time, so removing the file takes effect
@@ -896,6 +897,8 @@ picture.
 | `--output-format {json\|logfmt}` | Emit a machine-readable run summary to stdout instead of the default human-readable summary. JSON round-trips through `jq`; logfmt round-trips through standard logfmt parsers. 11-field schema v1 (`kernel_version`, `modules_available`, `modules_loaded`, `modules_blacklisted`, `fingerprint`, `output_path`, ...). Survives `--quiet` (since v1.3) |
 | `--install-initramfs-hook` | Detect the active initramfs builder (dracut, initramfs-tools, mkinitcpio) and install a small hook that strips `modulejail-blacklist.conf` from rebuilt initramfs cpios. Closes the upgrade-then-stale-blacklist trap (gh #19). Requires root. Prints the operator-runnable rebuild command after writing; does not rebuild the initramfs (operator schedules that on their own time). Pair with `--dry-run` to print what would be written without touching any file (since v1.4) |
 | `--uninstall-initramfs-hook` | Remove every known strip-hook file path regardless of which builder is currently detected (handles distro migrations), including the mkinitcpio `HOOKS` drop-in and the legacy pacman trigger. Prints the rebuild command afterwards. Requires root (since v1.4) |
+| `--destdir DIR` | For package builds, with `--install-initramfs-hook` and `--initramfs-builder`: write the hook under `DIR` (e.g. `%{buildroot}`) so the package owns it, instead of creating it from a post-install script. No root needed (since v1.6.3) |
+| `--initramfs-builder NAME` | Use `dracut`, `initramfs-tools` or `mkinitcpio` instead of detecting the builder on the host. Required with `--destdir` (since v1.6.3) |
 | `-y`, `--yes` | Skip the interactive confirmation prompt that `--self-update` would otherwise present. Required for non-interactive invocations (postinst, cron, systemd-run) since `--self-update` refuses to apply silently from a non-tty (since v1.4) |
 | `--self-update` | Fetch the latest stable release from GitHub, preview it (incl. SHA-256 of the downloaded bytes), and prompt interactively before replacing the running script in place. Pass `-y` / `--yes` to skip the prompt (required for non-interactive invocations: postinst, cron, systemd-run). Operator edits to the `SYSADMIN WHITELIST` region of the script are preserved via marker-bracketed splice. External whitelist files (`--whitelist-file PATH` or the default `/etc/modulejail/whitelist.conf`) are NOT touched. Pair with `--dry-run` to preview without prompting. Detects packaged installs (dpkg/rpm/pacman) and prints a warning; prefer `apt upgrade` / `dnf upgrade` / `pacman -Syu` on packaged hosts. Requires `curl` or `wget` (since v1.4) |
 | `-V`, `--version` | Show program version and exit |
@@ -905,7 +908,7 @@ Environment variables:
 
 | Variable | Description |
 |----------|-------------|
-| `MODULEJAIL_NO_UPDATE_CHECK` | Set to any non-empty value to skip the post-run update check |
+| `MODULEJAIL_NO_UPDATE_CHECK` | Set to any non-empty value to skip the post-run update check. Distro packages can turn the check off at build time instead with `sed -i 's/^UPDATE_CHECK_DEFAULT=1$/UPDATE_CHECK_DEFAULT=0/' modulejail` (since v1.6.3) |
 | `MODULEJAIL_LOGGER_PATH` | Path to the logger binary for syslog install-line detection (default: `/usr/bin/logger`) |
 | `MODULEJAIL_DEFAULT_WHITELIST_FILE` | Override the auto-detected whitelist path (default: `/etc/modulejail/whitelist.conf`) |
 | `MODULEJAIL_INITRAMFS_BUILDER` | Force the initramfs builder detection used by `--install-initramfs-hook` / `--uninstall-initramfs-hook` to one of `dracut`, `initramfs-tools`, `mkinitcpio`. Test-only plumbing (since v1.4) |
@@ -1027,8 +1030,9 @@ rebuilds every initramfs image so the removal applies immediately:
 sudo modulejail --uninstall-initramfs-hook --yes
 ```
 
-Packaged installs (.deb / .rpm / AUR) call this from their `prerm` /
-`%preun` scriptlets automatically.
+The .deb and AUR packages call this from their remove scripts
+automatically. The .rpm owns its dracut hook as a packaged file, so
+`dnf remove` deletes it.
 
 The generated file uses `install <module> ...` directives (with either a
 `/bin/sh + logger` body or `/bin/true`, see *Viewing blocked module

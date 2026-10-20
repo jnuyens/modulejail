@@ -32,7 +32,7 @@ export PATH
 # --- Tool version + sysexits.h exit code constants ---
 # VERSION is the single source of truth for both --version and the
 # generated blacklist header. Bump on every release per SemVer.
-VERSION='1.6.2'
+VERSION='1.6.3'
 
 # --- Build-time switch for distro packages ---
 # UPDATE_CHECK_DEFAULT=1 makes every run end with a best-effort lookup of

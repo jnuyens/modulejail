@@ -48,7 +48,7 @@ Modules reachable this way, with recent CVE examples:
 | `AF_INET / SOCK_RAW / IPPROTO_SCTP` | `sctp`, `sctp_diag` | CVE-2025-40331 TOCTOU in diag path |
 | `AF_INET / SOCK_DCCP` | `dccp_ipv4`, `dccp_ipv6` | Recurring UAFs; DCCP is deprecated upstream but still shipped |
 | `AF_TIPC` | `tipc` | CVE-2021-43267 remote RCE |
-| `AF_RDS` | `rds`, `rds_tcp`, `rds_rdma` | Multiple historical UAFs |
+| `AF_RDS` | `rds`, then `rds_tcp` / `rds_rdma` on `setsockopt(SO_RDS_TRANSPORT)` | Multiple historical UAFs; CVE-2026-98560 (connection path set, Oct 2026) |
 | `AF_CAN` | `can`, `can_raw`, `can_bcm`, `can_gw`, `j1939` | Recurring `can_bcm` UAFs |
 | `AF_NFC` | `nfc`, `nci`, `nci_core` | CVE-2024-26581 OOB |
 | `AF_X25 / AX25 / NETROM / ROSE / DECNET / IPX / APPLETALK` | namesake modules | Legacy. Many distros ship `blacklist net-pf-N` for these out of the box. |
@@ -200,6 +200,7 @@ the capability check before, some after.
 | `NETLINK_NETFILTER` (12) | `nfnetlink`, `nf_tables`, `nfnetlink_log`, `nfnetlink_queue` | **The big one.** Almost every nf_tables LPE chain starts here. |
 | `NETLINK_GENERIC` (16) | usually built-in; loads per-family `genl` modules (`l2tp`, `gtp`, ...) | GTP CVE-2024 family |
 | `NETLINK_XFRM` (6) | `xfrm_user`, `xfrm_algo` | IPsec keying |
+| `NETLINK_ROUTE` (0) | built-in; `tc` requests load `act_*`, `cls_*` and `sch_*` modules by name | Needs `CAP_NET_ADMIN`, so reachable through Tier 7. CVE-2026-98441 (`act_ct`, Oct 2026) |
 
 ### Tier 7 - The user-namespace amplifier
 
@@ -216,11 +217,51 @@ becomes reachable by any unprivileged user. This is the mechanism behind:
 - CVE-2024-1086 (nf_tables UAF) - universal LPE via userns + netlink + tier-6 autoload
 - CVE-2023-35001 (nf_tables stack OOB) - same path
 - CVE-2022-34918 (nf_tables) - same path
+- CVE-2026-98441 (`act_ct`) - userns + rtnetlink, a `tc` action autoloads `act_ct`
 
 User namespaces are the single biggest amplifier of Tier 1, 5, 6 risk.
 Without them enabled, many of these LPE chains require root the attacker
 already has. See [Recipe 2](#recipe-2---disable-unprivileged-user-namespaces)
 below for the kill-switch.
+
+### Worked example: the October 2026 batch
+
+NVD published eleven kernel CVEs on 2026-10-18. Sorting them by the
+tiers above shows what ModuleJail does and does not do for a typical
+batch. A dry run of ModuleJail 1.6.2 (`conservative` profile) on a stock
+Ubuntu 24.04 server (kernel 6.8) blacklisted every module in the first
+two groups; none of them was loaded there.
+
+**Reachable by an unprivileged user, blocked when not in use:**
+
+| CVE | Module(s) | Trigger |
+|---|---|---|
+| CVE-2026-98560 | `rds`, `rds_tcp`, `rds_rdma` | Tier 1: `socket(AF_RDS, ...)`, no capability needed |
+| CVE-2026-98441 | `act_ct` | Tier 6 + 7: `tc` action from inside a user namespace |
+
+**Loaded only by hardware or root, blocked when not in use:**
+
+| CVE | Module(s) | Trigger |
+|---|---|---|
+| CVE-2026-98696 | `usbserial`, `ftdi_sio`, `pl2303`, `cp210x`, `ch341`, ... | Plugging in a USB serial device (physical access) |
+| CVE-2026-98508 | `virtio_gpu` | A virtio GPU exposed by the hypervisor |
+| CVE-2026-98511 | `nouveau` | NVIDIA GPU present |
+| CVE-2026-98520 | `amdgpu` (amdkfd) | AMD GPU present |
+| CVE-2026-98722 | `block2mtd` | Root only, no autoload alias |
+| CVE-2026-98765 | `dummy_hcd` | Root only, test driver, often not shipped |
+
+**Not addressed - built-in code:**
+
+| CVE | Code | Why |
+|---|---|---|
+| CVE-2026-98811 | `net/sched/cls_api` | Built in with `CONFIG_NET_CLS=y`. The race needs a classifier, and unused `cls_*` modules are blacklisted, but that only narrows the path. |
+| CVE-2026-98813 | BPF map allocator | Built in |
+| CVE-2026-98842 | Module loader | Core kernel |
+
+Two caveats apply to every row. ModuleJail keeps whatever `lsmod` showed
+at snapshot time, so a GPU host keeps its GPU driver and needs the kernel
+update like any other host. And `nouveau` and `amdgpu` are in the
+`desktop` profile's baseline, so `-p desktop` keeps them by design.
 
 ---
 
